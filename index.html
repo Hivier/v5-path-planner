@@ -133,6 +133,7 @@
         <div class="stat"><span class="muted">Waypoints</span><strong id="count">0</strong></div>
         <div class="stat"><span class="muted">Approx. path length</span><strong id="distance">0.0 in</strong></div>
         <div class="stat"><span class="muted">Attached pieces</span><strong id="attachedCount">0</strong></div>
+        <button id="releaseRobotPiece">Return active robot's object</button>
         <button id="releasePieces">Return attached pieces</button>
         <div id="message" role="status" aria-live="polite"></div>
       </section>
@@ -146,10 +147,10 @@
         </div>
         <div><label for="image">Optional 2D field image</label><input id="image" type="file" accept="image/*"></div>
         <div class="muted">Use the red/blue button beside the field to choose the robot's alliance color. Click a corner tube to add a match load; right-click it or use EDIT LOAD to change its options.</div>
-        <div class="muted">Place up to four robots, two per alliance. The side color button chooses the next robot's alliance. Edit, preview and export the active robot's path. Click a piece to attach it to the nearest robot; Return attached pieces restores all pickups.</div>
+        <div class="muted">Place up to four robots, two per alliance. Click a cup, pin, or cup-and-pin assembly to attach it to the nearest robot. Each robot carries one object at a time; a cup with a pin counts as one. Return a robot's object before picking up another.</div>
         <div class="muted">Draw creates field annotations. Straight path uses two clicks; the active robot's path connects to the first point and then travels straight to the second. Use Select / waypoints to interact with field objects.</div>
         <div class="muted">Click a wall toggle once to flip it: blue-side toggles cycle yellow → red → blue; red-side toggles cycle yellow → blue → red.</div>
-        <div class="notice">Field elements are approximations based on the supplied images, not official dimensions. A custom 2D image does not change the 3D model.</div>
+        <div class="notice">Scoring areas and field elements are approximations based on the supplied images, not official dimensions. A custom 2D image does not change the 3D model.</div>
       </section>
       <section class="card stack">
         <h2>Save &amp; export</h2>
@@ -220,11 +221,11 @@
     const allianceColors = { red: '#d94a56', blue: '#298fd1' };
     const resolution = 25;
     const fieldPieces = {
-      stacks: [[.337,.83], [.17,.66], [.5,.5], [.83,.34], [.66,.17]],
+      stacks: [[.337,.83,4], [.17,.66,1], [.5,.5,0], [.83,.34,1], [.66,.17,4]],
       towers: [[.5,.66], [.337,.5], [.66,.5], [.5,.34]],
       clusters: [[.17,.83], [.337,.66], [.66,.34], [.83,.17]],
       neutral: [[.83,.83], [.66,.66], [.337,.34], [.17,.17]],
-      markers: [[.66,.83,'#09aee6'], [.83,.66,'#09aee6'], [.17,.34,'#e52d50'], [.337,.17,'#e52d50']]
+      markers: [[.66,.83,'#09aee6',3], [.83,.66,'#09aee6',2], [.17,.34,'#e52d50',2], [.337,.17,'#e52d50',3]]
     };
 
     function setMessage(text = '') { message.textContent = text; }
@@ -371,6 +372,9 @@
         ctx.fillStyle = color; ctx.fill(); ctx.strokeStyle = '#23262a'; ctx.lineWidth = 3; ctx.stroke();
       };
       fieldPieces.stacks.forEach(([x, y]) => circle(x, y, 21, '#20262b'));
+      fieldPieces.markers.forEach(([x,y,color]) => {
+        circle(x,y,17,color); circle(x,y,6,'#25323a');
+      });
       for (const t of [1/3, 2/3]) for (const offset of [-.048, 0, .048]) {
         const color = offset === 0 ? '#f2df25' : '#eceeea';
         circle(t+offset,.025,15,color); circle(t+offset,.975,15,color);
@@ -428,7 +432,7 @@
       for (const load of matchLoads) callback(load, loadPosition(load.loader, counts[load.loader]++));
     }
     function pickupItems() {
-      const items = fieldItems.map(item => ({...item, attached:fieldAttachments.has(item.id),robotId:fieldOwners[item.id]}));
+      const items = fieldItems.filter(item=>!item.scoringArea).map(item => ({...item, attached:fieldAttachments.has(item.id),robotId:fieldOwners[item.id]}));
       eachLoad((load, position) => {
         const faces = [];
         drawLoad3d(faces, load, position);
@@ -500,6 +504,19 @@
         ctx.strokeStyle = '#e7edf7'; ctx.lineWidth = 3; ctx.stroke();
       }
       eachPositionedItem((item,p) => { if (!item.attached) drawItem2d(item,p); });
+    }
+    function scoringLabels() {
+      return [...fieldPieces.stacks.map(([x,y,score])=>({x,y,score})),
+        ...fieldPieces.markers.map(([x,y,color,score])=>({x,y,score}))];
+    }
+    function drawScoringLabels2d() {
+      ctx.save(); ctx.font='bold 20px system-ui'; ctx.lineWidth=4;
+      ctx.strokeStyle='#e7e7e7'; ctx.fillStyle='#111';
+      for (const {x,y,score} of scoringLabels()) {
+        const px=x*1000+23, py=(1-y)*1000-18;
+        ctx.strokeText(String(score),px,py); ctx.fillText(String(score),px,py);
+      }
+      ctx.restore();
     }
     function drawLoad3d(faces, load, position) {
       const parts = [], {cup, pin} = pieceGeometry(parts), config = load.config;
@@ -599,7 +616,10 @@
         }
       }
       for (const [i, [x, y, color]] of fieldPieces.markers.entries()) {
-        item(`marker-${i}`,x*144,y*144,0,'pin',i<2?'blue-blue':'red-red',()=>round(x*144,y*144,0,2.5,2.5,2,color));
+        round(x*144,y*144,0,3.8,2.9,1.3,color,12);
+        round(x*144,y*144,1.3,2.9,1.9,1.8,color,12);
+        round(x*144,y*144,3.1,1.3,1.3,.15,'#26343a',12);
+        fieldItems.push({id:`marker-${i}`,scoringArea:true});
       }
       for (const t of [48,96]) {
         for (const offset of [-7,0,7]) {
@@ -641,6 +661,18 @@
     document.getElementById('releasePieces').addEventListener('click',()=>{
       returnPieces(); setMessage(); draw();
     });
+    document.getElementById('releaseRobotPiece').addEventListener('click',()=>{
+      if (!activeRobotId) {setMessage('Select a robot first.'); return;}
+      let returned=false;
+      for (const id of [...fieldAttachments]) {
+        if (fieldOwners[id]===activeRobotId) {fieldAttachments.delete(id); delete fieldOwners[id]; returned=true;}
+      }
+      for (const load of matchLoads) if (load.robotId===activeRobotId && load.attached) {
+        delete load.attached; delete load.robotId; returned=true;
+      }
+      setMessage(returned ? 'The active robot’s object was returned.' : 'The active robot is not carrying an object.');
+      draw();
+    });
     function insidePolygon(x,y,vertices) {
       let inside=false;
       for (let i=0,j=vertices.length-1;i<vertices.length;j=i++) {
@@ -677,6 +709,10 @@
         if (distance<closest) {closest=distance; nearest=robot;}
       }
       if (!nearest) {setMessage('Place a robot before attaching pieces.'); return true;}
+      if (Object.values(fieldOwners).includes(nearest.id) || matchLoads.some(load=>load.attached && load.robotId===nearest.id)) {
+        setMessage(`The nearest robot (${nearest.alliance} ${nearest.id}) is already carrying an object. Return it before picking up another.`);
+        return true;
+      }
       if (chosen.load) {chosen.load.attached=true; chosen.load.robotId=nearest.id;}
       else {fieldAttachments.add(chosen.id); fieldOwners[chosen.id]=nearest.id;}
       setMessage(`Piece attached to ${nearest.alliance} ${nearest.id}.`); draw();
@@ -732,6 +768,13 @@
         ctx3d.strokeStyle = 'rgba(24,30,34,.28)'; ctx3d.lineWidth = .75; ctx3d.stroke();
       }
       ctx3d.globalAlpha=1;
+      ctx3d.save(); ctx3d.font='bold 18px system-ui'; ctx3d.lineWidth=4;
+      ctx3d.strokeStyle='#e7e7e7'; ctx3d.fillStyle='#14191d';
+      for (const {x,y,score} of scoringLabels()) {
+        const p=project3d([x*144+4,y*144+4,0]);
+        ctx3d.strokeText(String(score),p.x,p.y); ctx3d.fillText(String(score),p.x,p.y);
+      }
+      ctx3d.restore();
     }
     function fieldGeometryHelpers(faces) {
       function box(x,y,z,l,w,h,color,angle = 0) {
@@ -777,6 +820,7 @@
       ctx.restore();
       drawToggles2d();
       drawLoads2d();
+      drawScoringLabels2d();
       ctx.strokeStyle = 'rgba(190,210,230,.18)'; ctx.lineWidth = 2;
       for (let i = 1; i < 6; i++) {
         const n = i * 1000 / 6;
@@ -1221,7 +1265,7 @@
       download('v5-path.csv', 'x_in,y_in,heading_deg,distance_in\n' + rows.join('\n') + '\n', 'text/csv');
       setMessage();
     });
-    function decodeSnapshot(project) {
+    function decodeSnapshot(project, migrations = []) {
         if (!project || project.version !== 1 || project.units !== 'inches' || !project.settings || !Array.isArray(project.waypoints)) throw new Error('Unsupported project format.');
         for (const [key, [min, max]] of Object.entries(limits)) {
           const value = project.settings[key];
@@ -1262,6 +1306,21 @@
           return {id:load.id || crypto.randomUUID(),loader:load.loader,config:{...load.config},attached:load.attached===true,...(load.attached ? {robotId:owner} : {})};
         });
         if (new Set(nextLoads.map(load=>load.id)).size!==nextLoads.length) throw new Error('Duplicate match load IDs.');
+        const occupied=new Set();
+        let returned=0, markersRestored=0;
+        for (const id of nextAttachments) {
+          if (fieldItems.find(item=>item.id===id).scoringArea) {
+            nextAttachments.delete(id); delete nextOwners[id]; markersRestored++; continue;
+          }
+          const owner=nextOwners[id];
+          if (occupied.has(owner)) {nextAttachments.delete(id); delete nextOwners[id]; returned++;}
+          else occupied.add(owner);
+        }
+        for (const load of nextLoads) if (load.attached) {
+          if (occupied.has(load.robotId)) {delete load.attached; delete load.robotId; returned++;}
+          else occupied.add(load.robotId);
+        }
+        if (returned || markersRestored) migrations.push({returned,markersRestored});
         return {
           version:1,units:'inches',settings:Object.fromEntries(Object.keys(limits).map(key => [key, project.settings[key]])),
           robots:nextRobots,activeRobotId:nextActive,alliance:project.alliance ?? 'red',
@@ -1331,12 +1390,13 @@
     }
     function importSceneProject(project) {
       let nextScenes, index=0;
+      const migrations=[];
       if (project?.scenes !== undefined) {
         if (!Array.isArray(project.scenes) || project.scenes.length!==10 || !Number.isInteger(project.activeScene) || project.activeScene<0 || project.activeScene>=10) throw new Error('Invalid scene collection: expected 10 scenes.');
-        nextScenes=project.scenes.map(scene=>scene===null?null:decodeSnapshot(scene));
+        nextScenes=project.scenes.map(scene=>scene===null?null:decodeSnapshot(scene,migrations));
         index=project.activeScene;
         if (!nextScenes[index]) throw new Error('The active scene is missing.');
-      } else nextScenes=[decodeSnapshot(project),...Array(9).fill(null)];
+      } else nextScenes=[decodeSnapshot(project,migrations),...Array(9).fill(null)];
       restoringScene=true;
       try {
         sceneTransition=null; scenes=nextScenes; activeScene=index;
@@ -1344,6 +1404,11 @@
       } finally {restoringScene=false;}
       storageFailed=false;
       updateSceneControls(); saveCurrentScene();
+      if (migrations.length) {
+        const returned=migrations.reduce((sum,m)=>sum+m.returned,0);
+        const markers=migrations.reduce((sum,m)=>sum+m.markersRestored,0);
+        showTopError(`Updated saved scenes: returned ${returned} extra object(s) and restored ${markers} scoring area(s). Each robot now carries at most one object.`);
+      }
     }
     function updateSceneControls() {
       document.querySelectorAll('#sceneButtons button').forEach((button,index)=>{

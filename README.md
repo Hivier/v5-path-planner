@@ -22,6 +22,10 @@ available at https://hivier.github.io/v5-path-planner/.
   end, a straight connector is added. Press Escape to cancel the first point.
   Choose **Select / waypoints** to resume normal field interactions.
 - Click cups, pins, or cup-and-pin assemblies to attach them to the nearest robot.
+  Each robot can carry one object; a cup with a pin counts as one. Return the
+  active robot's object before picking up another.
+- The field includes four black scoring areas plus the central 0, and four
+  red/blue scoring areas. Their shapes and positions are approximations.
 - Click corner match loaders to configure or add loads; right-click to edit defaults.
 - Click wall toggles to cycle their colors.
 - Use scenes 1 through 10 to save different field states. A new scene copies the
@@ -31,6 +35,10 @@ available at https://hivier.github.io/v5-path-planner/.
 Changes are autosaved in this browser. Download a project file to back up all
 scenes and field images or move them to another browser. CSV export includes
 only the active robot's path.
+
+When opening older scenes with multiple objects on one robot, the planner keeps
+one and returns the extras to their original positions. Formerly movable
+colored scoring markers are restored to the field.
 
 The field geometry is an approximation based on reference images, not official
 measurements. Paths and scene transitions do not check collisions or control a
