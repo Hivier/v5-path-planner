@@ -1,0 +1,1407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>V5 Path Studio</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0c111b; color: #e7edf7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { padding: 18px 24px; border-bottom: 1px solid #293447; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    h1 { font-size: 20px; margin: 0; letter-spacing: -.02em; }
+    header span, .muted { color: #9cacc1; font-size: 13px; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; max-width: 1400px; margin: auto; padding: 20px; }
+    .field-wrap { min-width: 0; }
+    .field { width: min(100%, 900px); margin: auto; display: grid; grid-template-columns: minmax(0, 850px) 48px; gap: 8px; align-items: start; position: relative; }
+    .field-canvas { min-width: 0; }
+    canvas { display: block; width: 100%; aspect-ratio: 1; background: #152437; border: 1px solid #53667c; border-radius: 8px; touch-action: none; cursor: crosshair; }
+    canvas[hidden] { display: none; }
+    #field3d { cursor: grab; }
+    #field3d:active { cursor: grabbing; }
+    .view-controls { width: min(100%, 850px); margin: 0 auto 10px; }
+    .field-tools { display: grid; gap: 8px; }
+    .field-tools button { width: 48px; padding: 9px; }
+    .field-tools svg { display: block; width: 28px; height: 28px; }
+    .field-tools #alliance { padding: 6px 2px; font-size: 10px; font-weight: bold; }
+    .alliance-swatch { display: block; width: 22px; height: 22px; margin: 0 auto 4px; border: 2px solid #e7edf7; border-radius: 50%; }
+    .field-tools #editLoader { padding: 6px 2px; font-size: 10px; font-weight: bold; }
+    .loader-menu { position: absolute; z-index: 3; width: min(260px, 90%); padding: 14px; border: 1px solid #647890; border-radius: 8px; background: #151e2c; box-shadow: 0 8px 24px #0009; }
+    .loader-menu[hidden] { display: none; }
+    .loader-menu select { width: 100%; background: #0d1521; color: #fff; border: 1px solid #43536b; border-radius: 6px; padding: 7px; margin-bottom: 10px; }
+    .loader-menu label.checkbox { display: flex; align-items: center; gap: 6px; margin: 3px 0 10px; }
+    #field3d.placing { cursor: crosshair; }
+    dialog { width: min(360px, calc(100vw - 32px)); background: #151e2c; color: #e7edf7; border: 1px solid #53667c; border-radius: 10px; padding: 20px; }
+    dialog::backdrop { background: rgba(0, 0, 0, .7); }
+    #headingDial { display: block; width: 220px; max-width: 100%; margin: 10px auto; touch-action: none; cursor: crosshair; }
+    .hint { margin: 10px auto 0; max-width: 850px; line-height: 1.5; }
+    aside { display: grid; align-content: start; gap: 14px; }
+    .card { background: #151e2c; border: 1px solid #2c394b; border-radius: 10px; padding: 15px; }
+    h2 { font-size: 14px; margin: 0 0 12px; color: #dce8f8; }
+    label { display: block; font-size: 12px; color: #aab9cb; margin-bottom: 5px; }
+    input[type=number] { width: 100%; background: #0d1521; color: white; border: 1px solid #43536b; border-radius: 6px; padding: 8px; font: inherit; }
+    input[type=file] { width: 100%; font-size: 12px; color: #aab9cb; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stack { display: grid; gap: 10px; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+    button { border: 1px solid #43536b; border-radius: 6px; padding: 9px 11px; background: #253348; color: #ecf4ff; font: inherit; font-size: 13px; cursor: pointer; }
+    button:hover { background: #344861; }
+    button.primary { background: #167c79; border-color: #239e98; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .stat { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+    .notice { font-size: 12px; line-height: 1.5; color: #f0c77c; }
+    #message { min-height: 1.2em; color: #ffbf9b; font-size: 12px; overflow-wrap: anywhere; }
+    #topError { margin: 8px 24px 0; padding: 8px 12px; background: #48232c; color: #ffd1d6; border-radius: 6px; font-size: 13px; }
+    #robotSelect { width: 100%; padding: 8px; background: #0d1521; color: #fff; border: 1px solid #43536b; border-radius: 6px; margin-bottom: 10px; }
+    #sceneButtons { display: grid; grid-template-columns: repeat(5,1fr); gap: 6px; }
+    #sceneButtons button { padding: 8px 0; }
+    @media (max-width: 850px) { main { grid-template-columns: 1fr; } aside { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); } }
+  </style>
+</head>
+<body>
+  <header><h1>V5 Path Studio</h1><span>Plan a path. Preview your drivetrain.</span></header>
+  <div id="topError" role="alert" hidden></div>
+  <main>
+    <section class="field-wrap">
+      <div class="view-controls buttons">
+        <button id="view2d" aria-pressed="false">2D path editor</button>
+        <button id="view3d" class="primary" aria-pressed="true">3D field</button>
+      </div>
+      <div class="field">
+        <div class="field-canvas">
+          <canvas id="field" width="1000" height="1000" aria-label="Path planning field" hidden></canvas>
+          <canvas id="field3d" width="1000" height="1000" aria-label="3D field preview"></canvas>
+        </div>
+        <div class="field-tools">
+          <button id="placeRobot" aria-label="Place robot start" aria-pressed="false" title="Place robot start">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="7" y="7" width="18" height="18" rx="3"/><path d="M12 19h8M12 14h.1M20 14h.1M16 7V3M3 11v10M29 11v10M11 25v3M21 25v3"/></svg>
+          </button>
+          <button id="alliance" aria-label="Alliance: Red. Switch to Blue" title="Alliance: Red. Switch to Blue">
+            <span class="alliance-swatch" id="allianceSwatch" aria-hidden="true"></span><span id="allianceLabel">RED</span>
+          </button>
+          <button id="editLoader" aria-pressed="false" title="Edit a corner match loader">EDIT<br>LOAD</button>
+        </div>
+        <div id="loaderMenu" class="loader-menu" role="dialog" aria-labelledby="loaderTitle" hidden>
+          <h2 id="loaderTitle">Match loader</h2>
+          <label for="loadContents">Match load</label>
+          <select id="loadContents"><option value="both">Cup + pin</option><option value="cup">Cup only</option><option value="pin">Pin only</option></select>
+          <div id="cupOptions"><label for="cupFace">Cup facing up</label>
+            <select id="cupFace"><option value="open">Clear/open side</option><option value="covered">Opaque/covered side</option></select>
+          </div>
+          <div id="pinOptions"><label for="pinType">Pin colors</label>
+            <select id="pinType">
+              <option value="red-yellow">Red / yellow</option><option value="blue-yellow">Blue / yellow</option>
+              <option value="red-blue">Red / blue</option><option value="red-red">Red / red</option>
+              <option value="blue-blue">Blue / blue</option><option value="yellow-yellow">Yellow / yellow</option>
+            </select>
+          </div>
+          <div id="insertOptions"><label for="insertColor">Color inside cup</label><select id="insertColor"></select></div>
+          <label class="checkbox"><input type="checkbox" id="saveDefault" checked> Use as this loader's default</label>
+          <div class="buttons"><button id="addLoad" class="primary">Add load</button><button id="setDefault">Save default</button><button id="clearLoads">Clear loads</button><button id="removeDefault">Remove default</button><button id="closeLoader">Close</button></div>
+          <p class="muted">Loads are placed near the corner as an approximate preview, not a physics simulation.</p>
+        </div>
+      </div>
+      <p class="hint muted" id="viewHint">Drag to orbit the 3D field; scroll to zoom. Switch to the 2D editor to add or move waypoints. The green arrow marks the robot's front.</p>
+    </section>
+    <aside>
+      <section class="card">
+        <h2>Scenes</h2>
+        <div id="sceneButtons" aria-label="Scenes"></div>
+        <p class="muted" id="sceneStatus" role="status">Scene 1 · changes saved automatically</p>
+        <p class="muted">An unvisited scene copies the current one. Switching follows saved paths where available, otherwise a straight path. New or removed objects fade in or out. Transitions do not check collisions.</p>
+        <button id="finishTransition" disabled>Finish transition</button>
+      </section>
+      <section class="card">
+        <h2>Path controls</h2>
+        <label for="robotSelect">Active robot / path</label>
+        <select id="robotSelect"><option value="">Place a robot to begin</option></select>
+        <div class="buttons"><button id="removeRobot">Remove active robot</button></div>
+        <p class="muted" id="robotCount">0 / 4 robots · Red 0 / 2 · Blue 0 / 2</p>
+        <div class="buttons">
+          <button class="primary" id="play">Play preview</button>
+          <button id="restart">Restart</button>
+          <button id="undo">Remove last</button>
+          <button id="clear">Clear active path</button>
+        </div>
+        <div class="stat"><span class="muted">Waypoints</span><strong id="count">0</strong></div>
+        <div class="stat"><span class="muted">Approx. path length</span><strong id="distance">0.0 in</strong></div>
+        <div class="stat"><span class="muted">Attached pieces</span><strong id="attachedCount">0</strong></div>
+        <button id="releasePieces">Return attached pieces</button>
+        <div id="message" role="status" aria-live="polite"></div>
+      </section>
+      <section class="card stack">
+        <h2>Robot &amp; field</h2>
+        <div class="grid">
+          <div><label for="length">Robot length (in)</label><input id="length" type="number" min="4" max="48" step="0.5" value="18"></div>
+          <div><label for="width">Robot width (in)</label><input id="width" type="number" min="4" max="48" step="0.5" value="18"></div>
+          <div><label for="size">Field side (in)</label><input id="size" type="number" min="48" max="300" step="0.5" value="144"></div>
+          <div><label for="speed">Preview speed (in/s)</label><input id="speed" type="number" min="1" max="200" step="1" value="24"></div>
+        </div>
+        <div><label for="image">Optional 2D field image</label><input id="image" type="file" accept="image/*"></div>
+        <div class="muted">Use the red/blue button beside the field to choose the robot's alliance color. Click a corner tube to add a match load; right-click it or use EDIT LOAD to change its options.</div>
+        <div class="muted">Place up to four robots, two per alliance. The side color button chooses the next robot's alliance. Edit, preview and export the active robot's path. Click a piece to attach it to the nearest robot; Return attached pieces restores all pickups.</div>
+        <div class="muted">Click a wall toggle once to flip it: blue-side toggles cycle yellow → red → blue; red-side toggles cycle yellow → blue → red.</div>
+        <div class="notice">Field elements are approximations based on the supplied images, not official dimensions. A custom 2D image does not change the 3D model.</div>
+      </section>
+      <section class="card stack">
+        <h2>Save &amp; export</h2>
+        <div class="buttons">
+          <button id="save">Save project</button>
+          <button id="export">Export path CSV</button>
+        </div>
+        <div><label for="load">Open project JSON</label><input id="load" type="file" accept=".json,application/json"></div>
+        <div class="muted">CSV exports the active robot's path (inches; 0° is +X, counterclockwise positive). The initial heading does not constrain the curve. Save project includes all 10 scenes and field images.</div>
+        <div class="notice">Preview only: this is not a drivetrain controller or collision checker. Check robot clearance and test paths safely before use.</div>
+      </section>
+    </aside>
+  </main>
+  <dialog id="headingDialog" aria-labelledby="headingTitle">
+    <h2 id="headingTitle">Choose the robot's front</h2>
+    <p class="muted">Click or drag around the circle. Near multiples of 45° the heading snaps. 0° points right and 90° points up in the 2D field.</p>
+    <svg id="headingDial" viewBox="0 0 240 240" role="img" aria-label="Heading direction dial; use the heading input for keyboard entry">
+      <circle cx="120" cy="120" r="95" fill="#0d1521" stroke="#71839a" stroke-width="2"/>
+      <g stroke="#53667c" stroke-width="2">
+        <path d="M120 25v12M120 203v12M25 120h12M203 120h12M53 53l9 9M178 178l9 9M187 53l-9 9M62 178l-9 9"/>
+      </g>
+      <text x="213" y="115" fill="#c6d6e8" font-size="12">0°</text>
+      <text x="110" y="19" fill="#c6d6e8" font-size="12">90°</text>
+      <text x="1" y="115" fill="#c6d6e8" font-size="12">180°</text>
+      <text x="104" y="235" fill="#c6d6e8" font-size="12">270°</text>
+      <line id="headingLine" x1="120" y1="120" x2="200" y2="120" stroke="#17b9a1" stroke-width="5" stroke-linecap="round"/>
+      <circle id="headingTip" cx="200" cy="120" r="8" fill="#17b9a1"/>
+      <circle cx="120" cy="120" r="5" fill="#e7edf7"/>
+    </svg>
+    <label for="headingInput">Heading in degrees (0–359.9)</label>
+    <input id="headingInput" type="number" min="0" max="359.9" step="0.1" value="0">
+    <p class="muted">This sets the starting pose; it does not change the path curve.</p>
+    <div class="buttons"><button id="confirmHeading" class="primary">Place robot</button><button id="cancelHeading">Cancel</button></div>
+  </dialog>
+  <script>
+    'use strict';
+    const canvas = document.getElementById('field');
+    const ctx = canvas.getContext('2d');
+    const canvas3d = document.getElementById('field3d');
+    const ctx3d = canvas3d.getContext('2d');
+    const inputs = Object.fromEntries(['length', 'width', 'size', 'speed'].map(id => [id, document.getElementById(id)]));
+    const message = document.getElementById('message');
+    const playButton = document.getElementById('play');
+    const limits = { length: [4, 48], width: [4, 48], size: [48, 300], speed: [1, 200] };
+    let settings = { length: 18, width: 18, size: 144, speed: 24 };
+    let points = [], samples = [], total = 0, selected = -1, dragging = false;
+    let progress = 0, playing = false, previousTime = null, fieldImage = null;
+    let activeView = '3d', orbitAngle = -0.65, orbitPitch = 0.66, zoom = 1, orbitPointer = null;
+    let startHeading = null, placingRobot = false, pendingRobot = null, alliance = 'red';
+    const loaders = [[3,3], [3,141], [141,3], [141,141]];
+    let loaderDefaults = [null, null, null, null], matchLoads = [], editingLoader = false;
+    const fieldItems = [];
+    let fieldAttachments = new Set();
+    let fieldOwners = {};
+    let robots = [], activeRobotId = null;
+    const toggles = [
+      {x:72,y:0,angle:0,side:'red'}, {x:72,y:144,angle:0,side:'blue'},
+      {x:0,y:72,angle:Math.PI/2,side:'blue'}, {x:144,y:72,angle:Math.PI/2,side:'red'}
+    ];
+    let toggleStates = [0,0,0,0];
+    let scenes = Array(10).fill(null), activeScene = 0, sceneTransition = null, restoringScene = false;
+    let storageTimer = null, storageFailed = false;
+    let fieldImageData = null, imageRequest = 0;
+    const storageKey = 'v5-path-studio-scenes-v1';
+    const maxLoadsPerLoader = 16;
+    const pinColors = { red: '#e83445', blue: '#08aadc', yellow: '#f4de24' };
+    const allianceColors = { red: '#d94a56', blue: '#298fd1' };
+    const resolution = 25;
+    const fieldPieces = {
+      stacks: [[.337,.83], [.17,.66], [.5,.5], [.83,.34], [.66,.17]],
+      towers: [[.5,.66], [.337,.5], [.66,.5], [.5,.34]],
+      clusters: [[.17,.83], [.337,.66], [.66,.34], [.83,.17]],
+      neutral: [[.83,.83], [.66,.66], [.337,.34], [.17,.17]],
+      markers: [[.66,.83,'#09aee6'], [.83,.66,'#09aee6'], [.17,.34,'#e52d50'], [.337,.17,'#e52d50']]
+    };
+
+    function setMessage(text = '') { message.textContent = text; }
+    function showTopError(text = '') {
+      const error=document.getElementById('topError');
+      error.textContent=text; error.hidden=!text;
+    }
+    function syncRobot() {
+      const robot=robots.find(robot=>robot.id===activeRobotId);
+      if (robot) Object.assign(robot,{points,startHeading,progress});
+    }
+    function updateRobotControls() {
+      const select=document.getElementById('robotSelect');
+      select.replaceChildren();
+      if (!robots.length) {
+        const option=document.createElement('option'); option.value=''; option.textContent='Place a robot to begin'; select.append(option);
+      }
+      for (const robot of robots) {
+        const option=document.createElement('option'); option.value=robot.id;
+        option.textContent=`${robot.alliance === 'red' ? 'Red' : 'Blue'} robot ${robot.id.split('-')[1]}`;
+        select.append(option);
+      }
+      select.value=activeRobotId || '';
+      document.getElementById('removeRobot').disabled=!robots.length;
+      document.getElementById('robotCount').textContent=`${robots.length} / 4 robots · Red ${robots.filter(r=>r.alliance==='red').length} / 2 · Blue ${robots.filter(r=>r.alliance==='blue').length} / 2`;
+    }
+    function activateRobot(id) {
+      syncRobot(); stop();
+      const robot=robots.find(robot=>robot.id===id);
+      activeRobotId=robot ? robot.id : null;
+      points=robot ? robot.points : []; startHeading=robot ? robot.startHeading : null;
+      progress=robot ? robot.progress : 0; selected=-1;
+      updateRobotControls(); rebuild();
+    }
+    document.getElementById('robotSelect').addEventListener('change',event=>activateRobot(event.target.value));
+    document.getElementById('removeRobot').addEventListener('click',()=>{
+      const removed=activeRobotId;
+      for (const id of [...fieldAttachments]) if (fieldOwners[id]===removed) {fieldAttachments.delete(id); delete fieldOwners[id];}
+      matchLoads.forEach(load=>{if(load.robotId===removed) {delete load.attached; delete load.robotId;}});
+      robots=robots.filter(robot=>robot.id!==removed);
+      activeRobotId=null;
+      activateRobot(robots[0]?.id); showTopError();
+    });
+    function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+    function toCanvas(p) { return { x: p.x / settings.size * 1000, y: 1000 - p.y / settings.size * 1000 }; }
+    function toField(x, y) { return { x: clamp(x / 1000 * settings.size, 0, settings.size), y: clamp((1000 - y) / 1000 * settings.size, 0, settings.size) }; }
+    function pointerPosition(event) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: (event.clientX - rect.left) / rect.width * 1000, y: (event.clientY - rect.top) / rect.height * 1000 };
+    }
+    function spline(a, b, c, d, t) {
+      const t2 = t * t, t3 = t2 * t;
+      return 0.5 * (2 * b + (-a + c) * t + (2*a - 5*b + 4*c - d) * t2 + (-a + 3*b - 3*c + d) * t3);
+    }
+    function samplePath(points) {
+      const samples = [];
+      let total = 0;
+      if (points.length === 1) samples.push({ ...points[0], distance: 0 });
+      for (let i = 0; i < points.length - 1; i++) {
+        const a = points[Math.max(0, i - 1)], b = points[i], c = points[i + 1], d = points[Math.min(points.length - 1, i + 2)];
+        for (let j = 0; j <= resolution; j++) {
+          if (i && j === 0) continue;
+          const t = j / resolution;
+          const p = { x: spline(a.x, b.x, c.x, d.x, t), y: spline(a.y, b.y, c.y, d.y, t) };
+          if (samples.length) {
+            const last = samples[samples.length - 1];
+            total += Math.hypot(p.x - last.x, p.y - last.y);
+          }
+          samples.push({ ...p, distance: total });
+        }
+      }
+      return {samples,total};
+    }
+    function rebuild() {
+      ({samples,total}=samplePath(points));
+      progress = clamp(progress, 0, total);
+      syncRobot();
+      document.getElementById('count').textContent = points.length;
+      document.getElementById('distance').textContent = total.toFixed(1) + ' in';
+      playButton.disabled = total < 0.001;
+      draw();
+    }
+    function angleAt(index, pathSamples = samples) {
+      const samples=pathSamples;
+      let before = index, after = index;
+      while (before > 0 && Math.hypot(samples[index].x - samples[before].x, samples[index].y - samples[before].y) < 1e-8) before--;
+      while (after < samples.length - 1 && Math.hypot(samples[after].x - samples[index].x, samples[after].y - samples[index].y) < 1e-8) after++;
+      return Math.atan2(samples[after].y - samples[before].y, samples[after].x - samples[before].x);
+    }
+    function poseAt(distance, pathSamples = samples, heading = startHeading) {
+      const samples=pathSamples;
+      if (!samples.length) return null;
+      if (distance === 0 && heading !== null) return { ...samples[0], angle: heading * Math.PI / 180 };
+      if (samples.length === 1) return { ...samples[0], angle: 0 };
+      let i = 1;
+      while (i < samples.length - 1 && samples[i].distance < distance) i++;
+      const a = samples[i - 1], b = samples[i];
+      const fraction = b.distance === a.distance ? 0 : (distance - a.distance) / (b.distance - a.distance);
+      return { x: a.x + (b.x - a.x) * fraction, y: a.y + (b.y - a.y) * fraction, angle: angleAt(i,samples) };
+    }
+    function robotPose(robot) {
+      if (sceneTransition?.routes.has(robot.id)) {
+        const pose=transitionRobotPose(robot.id);
+        return {...pose,x:pose.x/144*settings.size,y:pose.y/144*settings.size};
+      }
+      if (robot.id===activeRobotId) return poseAt(progress);
+      return poseAt(robot.progress,samplePath(robot.points).samples,robot.startHeading);
+    }
+    function drawRobot(pose, robot) {
+      if (!pose) return;
+      const p = toCanvas(pose), scale = 1000 / settings.size;
+      const l = settings.length * scale, w = settings.width * scale;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(-pose.angle);
+      ctx.globalAlpha = 0.9 * robotOpacity(robot.id);
+      ctx.fillStyle = allianceColors[robot.alliance];
+      ctx.strokeStyle = robot.id===activeRobotId ? '#fff' : '#52697d';
+      ctx.lineWidth = 3;
+      ctx.fillRect(-l / 2, -w / 2, l, w);
+      ctx.strokeRect(-l / 2, -w / 2, l, w);
+      ctx.fillStyle = '#283647';
+      const wheelLength = l * 0.28, wheelWidth = Math.max(5, w * 0.12);
+      for (const x of [-l * 0.28, l * 0.28]) {
+        for (const y of [-w / 2, w / 2 - wheelWidth]) ctx.fillRect(x - wheelLength / 2, y, wheelLength, wheelWidth);
+      }
+      ctx.fillStyle = '#17b9a1';
+      ctx.beginPath(); ctx.moveTo(l * 0.36, 0); ctx.lineTo(-l * 0.12, -w * 0.18); ctx.lineTo(-l * 0.12, w * 0.18); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    function drawField2d() {
+      ctx.fillStyle = '#777c80'; ctx.fillRect(0, 0, 1000, 1000);
+      ctx.strokeStyle = '#e5e5e5'; ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(90, 90); ctx.lineTo(910, 910);
+      ctx.moveTo(910, 90); ctx.lineTo(90, 910);
+      ctx.stroke();
+      const circle = (x, y, radius, color) => {
+        ctx.beginPath(); ctx.arc(x * 1000, (1 - y) * 1000, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill(); ctx.strokeStyle = '#23262a'; ctx.lineWidth = 3; ctx.stroke();
+      };
+      fieldPieces.stacks.forEach(([x, y]) => circle(x, y, 21, '#20262b'));
+      for (const t of [1/3, 2/3]) for (const offset of [-.048, 0, .048]) {
+        const color = offset === 0 ? '#f2df25' : '#eceeea';
+        circle(t+offset,.025,15,color); circle(t+offset,.975,15,color);
+        circle(.025,t+offset,15,color); circle(.975,t+offset,15,color);
+      }
+    }
+    function toggleCycle(index) {
+      return toggles[index].side==='blue' ? ['yellow','red','blue'] : ['yellow','blue','red'];
+    }
+    function toggleFaces(index) {
+      const {x,y,angle,side}=toggles[index], faces=[], {box}=fieldGeometryHelpers(faces);
+      const cycle=toggleCycle(index), color=pinColors[cycle[toggleStates[index]]];
+      box(x,y,5,28,2.4,2,color,angle);
+      const c=Math.cos(angle), s=Math.sin(angle);
+      for (const offset of [-15,15]) {
+        box(x+offset*c,y+offset*s,4.5,2,4,4,'#303a40',angle);
+      }
+      const stripe=side==='blue' ? 1 : -1;
+      box(x-stripe*s,y+stripe*c,5.2,25,.45,.8,pinColors[cycle[(toggleStates[index]+1)%3]],angle);
+      return faces;
+    }
+    function drawToggles2d() {
+      toggles.forEach((toggle,index)=>{
+        ctx.save(); ctx.translate(toggle.x/144*1000,(1-toggle.y/144)*1000); ctx.rotate(-toggle.angle);
+        const cycle=toggleCycle(index);
+        ctx.fillStyle=pinColors[cycle[toggleStates[index]]]; ctx.fillRect(-97,-9,194,18);
+        ctx.fillStyle=pinColors[cycle[(toggleStates[index]+1)%3]];
+        ctx.fillRect(-86,toggle.side==='blue'?-8:4,172,4);
+        ctx.fillStyle='#303a40'; ctx.fillRect(-110,-14,12,28); ctx.fillRect(98,-14,12,28);
+        ctx.restore();
+      });
+    }
+    function flipClickedToggle(event) {
+      const target=event.currentTarget, r=target.getBoundingClientRect();
+      const x=(event.clientX-r.left)/r.width*1000, y=(event.clientY-r.top)/r.height*1000;
+      for (const [index,toggle] of toggles.entries()) {
+        let hit;
+        if (target===canvas) {
+          const dx=x-toggle.x/144*1000, dy=y-(1-toggle.y/144)*1000;
+          hit=toggle.angle===0 ? Math.abs(dx)<112&&Math.abs(dy)<20 : Math.abs(dy)<112&&Math.abs(dx)<20;
+        } else hit=toggleFaces(index).some(face=>insidePolygon(x,y,face.vertices.map(project3d)));
+        if (!hit) continue;
+        toggleStates[index]=(toggleStates[index]+1)%3;
+        setMessage(`${toggle.side} wall toggle: ${toggleCycle(index)[toggleStates[index]]}.`);
+        draw(); return true;
+      }
+      return false;
+    }
+    function loadPosition(loader, index) {
+      const [x,y] = loaders[loader], dx = 14 + (index % 4) * 10, dy = 14 + Math.floor(index / 4) * 10;
+      return { x: x < 72 ? dx : 144 - dx, y: y < 72 ? dy : 144 - dy };
+    }
+    function eachLoad(callback) {
+      const counts = [0,0,0,0];
+      for (const load of matchLoads) callback(load, loadPosition(load.loader, counts[load.loader]++));
+    }
+    function pickupItems() {
+      const items = fieldItems.map(item => ({...item, attached:fieldAttachments.has(item.id),robotId:fieldOwners[item.id]}));
+      eachLoad((load, position) => {
+        const faces = [];
+        drawLoad3d(faces, load, position);
+        items.push({id:load.id, load, ...position, z:0, config:load.config, faces, attached:load.attached === true,robotId:load.robotId});
+      });
+      return items;
+    }
+    function itemPosition(item, index) {
+      const robot=robots.find(robot=>robot.id===item.robotId);
+      const pose = robot ? robotPose(robot) : null;
+      if (!item.attached || !pose) return {x:item.x, y:item.y, z:item.z, angle:0};
+      const factor = 144/settings.size, c=Math.cos(pose.angle), s=Math.sin(pose.angle);
+      const forward = settings.length*factor/2 + 5 + Math.floor(index/3)*9;
+      const sideways = (index%3-1)*9;
+      return {x:pose.x*factor+forward*c-sideways*s, y:pose.y*factor+forward*s+sideways*c, z:2, angle:pose.angle};
+    }
+    function eachRawPositionedItem(callback) {
+      const held = {};
+      for (const item of pickupItems()) {
+        const index=held[item.robotId] || 0;
+        if(item.attached) held[item.robotId]=index+1;
+        callback(item,itemPosition(item,index));
+      }
+    }
+    function eachPositionedItem(callback) {
+      if (!sceneTransition) {eachRawPositionedItem(callback); return;}
+      const {items,t}=sceneTransition;
+      for (const entry of items.values()) {
+        const from=entry.from || entry.to, to=entry.to || entry.from;
+        const p=blendPose(from.p,to.p,t);
+        if (from.item.attached && to.item.attached && from.item.robotId===to.item.robotId && sceneTransition.routes.has(to.item.robotId)) {
+          const route=sceneTransition.routes.get(to.item.robotId), pose=transitionRobotPose(to.item.robotId);
+          const local=(position,robot)=>{
+            const dx=position.x-robot.x, dy=position.y-robot.y, c=Math.cos(robot.angle), s=Math.sin(robot.angle);
+            return {x:dx*c+dy*s,y:-dx*s+dy*c,angle:position.angle-robot.angle,z:position.z};
+          };
+          const offset=blendPose(local(from.p,route.from),local(to.p,route.to),t);
+          p.x=pose.x+offset.x*Math.cos(pose.angle)-offset.y*Math.sin(pose.angle);
+          p.y=pose.y+offset.x*Math.sin(pose.angle)+offset.y*Math.cos(pose.angle);
+          p.angle=pose.angle+offset.angle;
+        } else {
+          for (const [end,weight] of [[from,1-t],[to,t]]) {
+            if (!end.item.attached || !sceneTransition.routes.has(end.item.robotId)) continue;
+            const route=sceneTransition.routes.get(end.item.robotId), pose=transitionRobotPose(end.item.robotId);
+            p.x+=(pose.x-(route.from.x+(route.to.x-route.from.x)*t))*weight;
+            p.y+=(pose.y-(route.from.y+(route.to.y-route.from.y)*t))*weight;
+          }
+        }
+        p.opacity=entry.from && entry.to ? 1 : entry.from ? 1-t : t;
+        callback(to.item,p);
+      }
+    }
+    function drawItem2d(item, p) {
+      ctx.save(); ctx.globalAlpha=p.opacity ?? 1;
+      const config=item.config, x=p.x/144*1000, y=(1-p.y/144)*1000;
+      const colors=config.pinType.split('-'), outer=colors.find(color=>color!==config.insertColor)||config.insertColor;
+      ctx.beginPath(); ctx.arc(x,y,config.contents==='pin'?11:22,0,Math.PI*2);
+      ctx.fillStyle=config.contents==='pin'?pinColors[outer]:config.cupFace==='covered'?'#393e43':'#c2cece';
+      ctx.fill(); ctx.strokeStyle=item.attached?'#17b9a1':'#20262b'; ctx.lineWidth=3; ctx.stroke();
+      if (config.contents==='both'&&config.cupFace==='open') {
+        ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2); ctx.fillStyle=pinColors[outer]; ctx.fill();
+      }
+      ctx.restore();
+    }
+    function drawLoads2d() {
+      for (const [i,[x,y]] of loaders.entries()) {
+        ctx.beginPath(); ctx.arc(x / 144 * 1000, (1-y / 144) * 1000, 20, 0, Math.PI*2);
+        ctx.fillStyle = i < 2 ? '#df4354' : '#1da7d7'; ctx.fill();
+        ctx.strokeStyle = '#e7edf7'; ctx.lineWidth = 3; ctx.stroke();
+      }
+      eachPositionedItem((item,p) => { if (!item.attached) drawItem2d(item,p); });
+    }
+    function drawLoad3d(faces, load, position) {
+      const parts = [], {cup, pin} = pieceGeometry(parts), config = load.config;
+      const colors = config.pinType.split('-');
+      const outer = colors.find(color => color !== config.insertColor) || config.insertColor;
+      if (config.contents !== 'pin') cup(position.x,position.y);
+      if (config.contents !== 'cup') {
+        pin(position.x,position.y,config.contents === 'both' ? 8 : 0,
+          pinColors[outer],pinColors[config.insertColor],null,2.1,config.contents === 'both' ? 7.5 : 4.7);
+      }
+      const inverted = config.contents !== 'pin' && config.cupFace === 'covered';
+      const top = config.contents === 'both' ? 18.65 : 16;
+      for (const part of parts) {
+        faces.push({color:part.color, vertices:part.vertices.map(([x,y,z]) => [x,y,inverted ? top-z : z])});
+      }
+    }
+
+    function pieceGeometry(faces) {
+      const face = (vertices, color) => faces.push({ vertices, color });
+      const { round } = fieldGeometryHelpers(faces);
+      function cup(x, y) {
+        round(x,y,0,4.2,2.7,8,'#393e43',16);
+        const sides = 16, lower = 2.6, upper = 4.1;
+        for (let i = 0; i < sides; i++) {
+          const a = i * Math.PI * 2 / sides, b = (i + 1) * Math.PI * 2 / sides;
+          const point = (angle, radius, z) => [x + radius * Math.cos(angle), y + radius * Math.sin(angle), z];
+          face([point(a,lower,8),point(b,lower,8),point(b,upper,16),point(a,upper,16)], 'rgba(225,237,237,.18)');
+          face([point(a,upper,15.7),point(b,upper,15.7),point(b,upper,16.1),point(a,upper,16.1)], '#555e60');
+          if (i % 4 === 0) {
+            const c = a + .04;
+            face([point(a,lower,8.2),point(c,lower,8.2),point(c,upper,15.5),point(a,upper,15.5)], 'rgba(73,82,84,.65)');
+          }
+        }
+      }
+      function pin(x, y, z, outer, inner = '#e8d526', direction = null, collar = 2.1, bodyHeight = 4.7) {
+        const parts = [];
+        const { round: pinRound } = fieldGeometryHelpers(parts);
+        pinRound(0,0,0,.65,1.2,2.8,inner,12);
+        pinRound(0,0,2.8,collar,collar,.35,outer,12);
+        pinRound(0,0,3.15,1.35,.55,bodyHeight,outer,12);
+        for (const part of parts) {
+          const vertices = part.vertices.map(([a,b,c]) => direction === null
+            ? [x+a,y+b,z+c]
+            : [x + c*Math.cos(direction) - a*Math.sin(direction),
+               y + c*Math.sin(direction) + a*Math.cos(direction), z+b]);
+          face(vertices, part.color);
+        }
+      }
+      return {cup, pin};
+    }
+    // The model uses a normalized 144-unit field; actual measurements are not known.
+    function fieldGeometry() {
+      const faces = [];
+      const face = (vertices, color) => faces.push({ vertices, color });
+      const { box, round, stripe } = fieldGeometryHelpers(faces);
+      const { cup, pin } = pieceGeometry(faces);
+      function item(id,x,y,z,contents,pinType,build) {
+        const start=faces.length;
+        build();
+        fieldItems.push({id,x,y,z,config:{contents,cupFace:'open',pinType,insertColor:pinType.split('-')[1]},faces:faces.splice(start)});
+      }
+      for (let x = 0; x < 6; x++) for (let y = 0; y < 6; y++) {
+        face([[x*24,y*24,0],[(x+1)*24,y*24,0],[(x+1)*24,(y+1)*24,0],[x*24,(y+1)*24,0]], (x+y)%2 ? '#777c7d' : '#85898a');
+      }
+      stripe(13,13,131,131,.7,'#ebebeb');
+      stripe(13,131,131,13,.7,'#ebebeb');
+      box(72, 0, 0, 144, 1.5, 5, '#aeb4b6');
+      box(72, 144, 0, 144, 1.5, 5, '#aeb4b6');
+      box(0, 72, 0, 1.5, 144, 5, '#aeb4b6');
+      box(144, 72, 0, 1.5, 144, 5, '#aeb4b6');
+      for (let i = 0; i < 24; i++) {
+        const color = i % 2 ? '#161b1f' : '#f3f3eb', n = i * 6 + 3;
+        box(n, 0, 5, 6, 1.6, .7, color); box(n, 144, 5, 6, 1.6, .7, color);
+        box(0, n, 5, 1.6, 6, .7, color); box(144, n, 5, 1.6, 6, .7, color);
+      }
+      for (const [i, [x, y]] of fieldPieces.stacks.entries()) {
+        round(x*144,y*144,0,6,4.7,9,'#252b2e');
+        item(`stack-${i}`,x*144,y*144,8,'pin','yellow-yellow',()=>pin(x*144,y*144,8,'#f5de1b'));
+      }
+      for (const [i, [x, y]] of fieldPieces.towers.entries()) {
+        item(`tower-${i}`,x*144,y*144,0,'both','blue-yellow',()=>{
+          cup(x*144,y*144);
+          pin(x*144,y*144,8,'#08aadc','#e8d526',null,2.1,7.5);
+        });
+      }
+      for (const [i, [x, y]] of fieldPieces.neutral.entries()) {
+        item(`neutral-${i}`,x*144,y*144,0,'both','yellow-yellow',()=>{
+          cup(x*144,y*144);
+          pin(x*144,y*144,8,'#f4de24','#f4de24',null,2.1,7.5);
+        });
+      }
+      for (const [i, [x, y]] of fieldPieces.clusters.entries()) {
+        item(`cluster-cup-${i}`,x*144,y*144,0,'cup','yellow-yellow',()=>cup(x*144,y*144));
+        for (const [j,[angle,color]] of [[0,'blue'],[Math.PI/2,'blue'],[Math.PI,'red'],[-Math.PI/2,'red']].entries()) {
+          const px=x*144+4.5*Math.cos(angle), py=y*144+4.5*Math.sin(angle);
+          item(`cluster-pin-${i}-${j}`,px,py,0,'pin',color+'-yellow',()=>pin(px,py,2.1,pinColors[color],'#e8d526',angle));
+        }
+      }
+      for (const [i, [x, y, color]] of fieldPieces.markers.entries()) {
+        item(`marker-${i}`,x*144,y*144,0,'pin',i<2?'blue-blue':'red-red',()=>round(x*144,y*144,0,2.5,2.5,2,color));
+      }
+      for (const t of [48,96]) {
+        for (const offset of [-7,0,7]) {
+          const color = offset === 0 ? '#f2df25' : '#eceeea';
+          round(t+offset,3,5,3.3,3.3,2,color);
+          round(t+offset,141,5,3.3,3.3,2,color);
+          round(3,t+offset,5,3.3,3.3,2,color);
+          round(141,t+offset,5,3.3,3.3,2,color);
+        }
+      }
+      for (const [i, [x,y]] of loaders.entries()) {
+        const color = i < 2 ? '#e83445' : '#08aadd';
+        round(x,y,0,2.6,2.6,14,'rgba(200,218,220,.25)',12);
+        round(x,y,13.8,3.2,3.2,.8,color,12);
+        round(x,y,0,3.2,3.2,.8,color,12);
+      }
+      return { faces, box, round, stripe };
+    }
+    const model3d = fieldGeometry();
+    function project3d([x,y,z]) {
+      x-=72; y-=72;
+      const cos=Math.cos(orbitAngle), sin=Math.sin(orbitAngle), sp=Math.sin(orbitPitch), cp=Math.cos(orbitPitch), scale=4.1*zoom;
+      const horizontal=cos*x-sin*y, depth=sin*x+cos*y;
+      return {x:500+horizontal*scale,y:545+(depth*sp-z*cp)*scale,depth:depth*cp+z*sp};
+    }
+    function positionedFaces(item,p) {
+      if (!item.attached && !sceneTransition) return item.faces;
+      const c=Math.cos(p.angle), s=Math.sin(p.angle);
+      return item.faces.map(face=>({color:face.color,opacity:p.opacity ?? 1,vertices:face.vertices.map(([x,y,z])=>{
+        x-=item.x; y-=item.y;
+        return [p.x+x*c-y*s,p.y+x*s+y*c,p.z+z-item.z];
+      })}));
+    }
+    function returnPieces() {
+      fieldAttachments.clear();
+      fieldOwners={};
+      matchLoads.forEach(load=>{delete load.attached; delete load.robotId;});
+    }
+    document.getElementById('releasePieces').addEventListener('click',()=>{
+      returnPieces(); setMessage(); draw();
+    });
+    function insidePolygon(x,y,vertices) {
+      let inside=false;
+      for (let i=0,j=vertices.length-1;i<vertices.length;j=i++) {
+        const a=vertices[i], b=vertices[j];
+        if ((a.y>y)!==(b.y>y) && x<(b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x) inside=!inside;
+      }
+      return inside;
+    }
+    function attachClickedPiece(event) {
+      const target=event.currentTarget, rect=target.getBoundingClientRect();
+      const x=(event.clientX-rect.left)/rect.width*1000, y=(event.clientY-rect.top)/rect.height*1000;
+      let chosen=null, best=-Infinity;
+      for (const item of pickupItems()) {
+        if (item.attached) continue;
+        if (target===canvas) {
+          const distance=Math.hypot(x-item.x/144*1000,y-(1-item.y/144)*1000);
+          const radius=item.config.contents==='pin'?15:24;
+          if (distance<=radius && -distance>best) {chosen=item; best=-distance;}
+        } else {
+          for (const face of item.faces) {
+            const vertices=face.vertices.map(project3d);
+            if (!insidePolygon(x,y,vertices)) continue;
+            const depth=vertices.reduce((sum,p)=>sum+p.depth,0)/vertices.length;
+            if (depth>best) {chosen=item; best=depth;}
+          }
+        }
+      }
+      if (!chosen) return false;
+      let nearest=null, closest=Infinity;
+      for (const robot of robots) {
+        const pose=robotPose(robot);
+        if (!pose) continue;
+        const distance=Math.hypot(chosen.x-pose.x/settings.size*144,chosen.y-pose.y/settings.size*144);
+        if (distance<closest) {closest=distance; nearest=robot;}
+      }
+      if (!nearest) {setMessage('Place a robot before attaching pieces.'); return true;}
+      if (chosen.load) {chosen.load.attached=true; chosen.load.robotId=nearest.id;}
+      else {fieldAttachments.add(chosen.id); fieldOwners[chosen.id]=nearest.id;}
+      setMessage(`Piece attached to ${nearest.alliance} ${nearest.id}.`); draw();
+      return true;
+    }
+    function draw3d() {
+      const faces = model3d.faces.slice();
+      toggles.forEach((_,index)=>faces.push(...toggleFaces(index)));
+      const dynamic = fieldGeometryHelpers(faces);
+      eachPositionedItem((item,p)=>faces.push(...positionedFaces(item,p)));
+      const factor = 144 / settings.size;
+      if (sceneTransition) {
+        for (const [id,route] of sceneTransition.routes) {
+          const color=allianceColors[sceneTransition.robots.find(robot=>robot.id===id).alliance];
+          for(let i=1;i<route.samples.length;i++) {
+            const a=route.samples[i-1], b=route.samples[i];
+            dynamic.stripe(a.x,a.y,b.x,b.y,.65,color,.25);
+          }
+        }
+      } else for (let i = 1; i < samples.length; i++) {
+        dynamic.stripe(samples[i-1].x*factor, samples[i-1].y*factor, samples[i].x*factor, samples[i].y*factor, .9, '#ffcb68', .2);
+      }
+      if (!sceneTransition) points.forEach(p => dynamic.round(p.x*factor,p.y*factor,.25,1.3,1.3,.4,'#ffcb68'));
+      for (const robot of displayRobots()) {
+        const pose=robotPose(robot);
+        if (!pose) continue;
+        const faceStart=faces.length;
+        const x = pose.x*factor, y = pose.y*factor, l = settings.length*factor, w = settings.width*factor;
+        dynamic.box(x,y,1,l,w,4*factor,allianceColors[robot.alliance],pose.angle);
+        const c = Math.cos(pose.angle), s = Math.sin(pose.angle);
+        for (const dx of [-l*.28,l*.28]) for (const dy of [-w*.42,w*.42]) {
+          dynamic.box(x+dx*c-dy*s,y+dx*s+dy*c,.4,l*.26,w*.16,3*factor,'#293541',pose.angle);
+        }
+        const p = (a,b) => [x+a*c-b*s,y+a*s+b*c,5*factor+.1];
+        faces.push({ vertices: [p(l*.36,0),p(-l*.12,-w*.18),p(-l*.12,w*.18)], color: '#18b9a1' });
+        for (let i=faceStart;i<faces.length;i++) faces[i].opacity=robotOpacity(robot.id);
+      }
+      const projected = faces.map(f => {
+        const vertices = f.vertices.map(project3d);
+        return { vertices, color: f.color, opacity:f.opacity ?? 1, depth: vertices.reduce((sum, p) => sum+p.depth, 0)/vertices.length };
+      }).sort((a,b) => a.depth-b.depth);
+      ctx3d.fillStyle = '#172536'; ctx3d.fillRect(0,0,1000,1000);
+      for (const f of projected) {
+        ctx3d.globalAlpha=f.opacity;
+        ctx3d.beginPath(); f.vertices.forEach((p,i) => i ? ctx3d.lineTo(p.x,p.y) : ctx3d.moveTo(p.x,p.y));
+        ctx3d.closePath(); ctx3d.fillStyle = f.color; ctx3d.fill();
+        ctx3d.strokeStyle = 'rgba(24,30,34,.28)'; ctx3d.lineWidth = .75; ctx3d.stroke();
+      }
+      ctx3d.globalAlpha=1;
+    }
+    function fieldGeometryHelpers(faces) {
+      function box(x,y,z,l,w,h,color,angle = 0) {
+        const c = Math.cos(angle), s = Math.sin(angle);
+        const p = (a,b,d) => [x+a*c-b*s,y+a*s+b*c,z+d];
+        const a=p(-l/2,-w/2,0), b=p(l/2,-w/2,0), d=p(-l/2,w/2,0), e=p(l/2,w/2,0);
+        const A=p(-l/2,-w/2,h), B=p(l/2,-w/2,h), D=p(-l/2,w/2,h), E=p(l/2,w/2,h);
+        for (const vertices of [[a,b,B,A],[b,e,E,B],[e,d,D,E],[d,a,A,D],[A,B,E,D]]) faces.push({vertices,color});
+      }
+      function round(x,y,z,bottom,top,height,color,sides=10) {
+        const lower=[], upper=[];
+        for (let i=0;i<sides;i++) { const a=i*Math.PI*2/sides; lower.push([x+bottom*Math.cos(a),y+bottom*Math.sin(a),z]); upper.push([x+top*Math.cos(a),y+top*Math.sin(a),z+height]); }
+        for (let i=0;i<sides;i++) faces.push({vertices:[lower[i],lower[(i+1)%sides],upper[(i+1)%sides],upper[i]],color});
+        faces.push({vertices:upper,color});
+      }
+      function stripe(x1,y1,x2,y2,width,color,z=.08) {
+        const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy);
+        if (!len) return;
+        const ox=-dy/len*width/2, oy=dx/len*width/2;
+        const segments = Math.ceil(len / 4);
+        for (let i=0;i<segments;i++) {
+          const a=i/segments, b=(i+1)/segments;
+          faces.push({vertices:[[x1+dx*a+ox,y1+dy*a+oy,z],[x1+dx*b+ox,y1+dy*b+oy,z],[x1+dx*b-ox,y1+dy*b-oy,z],[x1+dx*a-ox,y1+dy*a-oy,z]],color});
+        }
+      }
+      return {box,round,stripe};
+    }
+    function draw() {
+      ctx.clearRect(0, 0, 1000, 1000);
+      drawField2d();
+      if (fieldImage) ctx.drawImage(fieldImage, 0, 0, 1000, 1000);
+      drawToggles2d();
+      drawLoads2d();
+      ctx.strokeStyle = 'rgba(190,210,230,.18)'; ctx.lineWidth = 2;
+      for (let i = 1; i < 6; i++) {
+        const n = i * 1000 / 6;
+        ctx.beginPath(); ctx.moveTo(n, 0); ctx.lineTo(n, 1000); ctx.moveTo(0, n); ctx.lineTo(1000, n); ctx.stroke();
+      }
+      if (sceneTransition) {
+        for (const [id,route] of sceneTransition.routes) {
+          ctx.beginPath();
+          route.samples.forEach((point,index)=>{
+            const x=point.x/144*1000,y=(1-point.y/144)*1000;
+            if(index) ctx.lineTo(x,y); else ctx.moveTo(x,y);
+          });
+          ctx.strokeStyle=allianceColors[sceneTransition.robots.find(robot=>robot.id===id).alliance];
+          ctx.lineWidth=5; ctx.stroke();
+        }
+      } else if (samples.length > 1) {
+        ctx.beginPath();
+        samples.forEach((point, i) => { const p = toCanvas(point); if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+        ctx.lineWidth = 7; ctx.strokeStyle = '#ffcb68'; ctx.stroke();
+      }
+      displayRobots().forEach(robot=>drawRobot(robotPose(robot),robot));
+      eachPositionedItem((item,p)=>{if(item.attached) drawItem2d(item,p);});
+      document.getElementById('attachedCount').textContent = fieldAttachments.size + matchLoads.filter(load=>load.attached).length;
+      if (!sceneTransition) points.forEach((point, i) => {
+        const p = toCanvas(point);
+        ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, Math.PI * 2);
+        ctx.fillStyle = i === selected ? '#fff' : '#ffcb68'; ctx.fill();
+        ctx.lineWidth = 3; ctx.strokeStyle = '#1b2c3c'; ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 19px system-ui'; ctx.fillText(String(i + 1), p.x + 17, p.y - 12);
+      });
+      if (activeView === '3d') draw3d();
+      saveCurrentScene();
+    }
+    function stop() { playing = false; previousTime = null; playButton.textContent = 'Play preview'; }
+    function tick(time) {
+      if (sceneTransition) {
+        if (sceneTransition.started===null) sceneTransition.started=time;
+        sceneTransition.t=clamp((time-sceneTransition.started)/sceneTransition.duration,0,1);
+        if (sceneTransition.t>=1) finishSceneTransition();
+        else draw();
+      }
+      if (playing) {
+        if (previousTime !== null) progress = Math.min(total, progress + (time - previousTime) / 1000 * settings.speed);
+        previousTime = time;
+        syncRobot();
+        if (progress >= total) stop();
+        draw();
+      }
+      requestAnimationFrame(tick);
+    }
+    function download(name, content, type) {
+      const url = URL.createObjectURL(new Blob([content], { type }));
+      const link = document.createElement('a'); link.href = url; link.download = name; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    function selectView(view) {
+      document.getElementById('loaderMenu').hidden = true;
+      activeView = view;
+      canvas.hidden = view !== '2d'; canvas3d.hidden = view !== '3d';
+      for (const name of ['2d', '3d']) {
+        const button = document.getElementById('view' + name);
+        button.classList.toggle('primary', name === view);
+        button.setAttribute('aria-pressed', String(name === view));
+      }
+      updateViewHint();
+      draw();
+    }
+    function updateViewHint() {
+      document.getElementById('viewHint').textContent = placingRobot
+        ? 'Click the field to place a new robot. Up to two robots per alliance and four total. Click the robot button again to cancel.'
+        : editingLoader ? 'Click a corner match loader to edit its options. Click EDIT LOAD again to cancel.'
+        : activeView === '3d'
+        ? "Drag to orbit the 3D field; scroll to zoom. Switch to the 2D editor to add or move waypoints. The green arrow marks the robot's front."
+        : "Click to add waypoints; drag to move them. Select a waypoint and press Delete to remove it. X increases right; Y increases up.";
+    }
+    const placeButton = document.getElementById('placeRobot');
+    const allianceButton = document.getElementById('alliance');
+    const headingDialog = document.getElementById('headingDialog');
+    const headingInput = document.getElementById('headingInput');
+    const headingDial = document.getElementById('headingDial');
+    const loaderMenu = document.getElementById('loaderMenu');
+    const contentsInput = document.getElementById('loadContents');
+    const cupFaceInput = document.getElementById('cupFace');
+    const pinTypeInput = document.getElementById('pinType');
+    const insertInput = document.getElementById('insertColor');
+    let activeLoader = null;
+    function setEditingLoader(value) {
+      editingLoader = value;
+      const button = document.getElementById('editLoader');
+      button.setAttribute('aria-pressed', String(value));
+      button.classList.toggle('primary', value);
+      updateViewHint();
+    }
+    document.getElementById('editLoader').addEventListener('click', () => {
+      if (!editingLoader) setPlacing(false);
+      setEditingLoader(!editingLoader); loaderMenu.hidden = true;
+    });
+    function validLoadConfig(config) {
+      if (!config || !['both','cup','pin'].includes(config.contents) || !['open','covered'].includes(config.cupFace)
+        || !['red-yellow','blue-yellow','red-blue','red-red','blue-blue','yellow-yellow'].includes(config.pinType)) return false;
+      return config.pinType.split('-').includes(config.insertColor);
+    }
+    function updateLoadOptions(preferredColor) {
+      const colors = [...new Set(pinTypeInput.value.split('-'))];
+      const previous = preferredColor || insertInput.value;
+      insertInput.replaceChildren(...colors.map(color => {
+        const option = document.createElement('option');
+        option.value = color; option.textContent = color[0].toUpperCase() + color.slice(1);
+        return option;
+      }));
+      insertInput.value = colors.includes(previous) ? previous : colors[colors.length - 1];
+      document.getElementById('cupOptions').hidden = contentsInput.value === 'pin';
+      document.getElementById('pinOptions').hidden = contentsInput.value === 'cup';
+      document.getElementById('insertOptions').hidden = contentsInput.value !== 'both' || colors.length === 1;
+    }
+    contentsInput.addEventListener('change', () => updateLoadOptions());
+    pinTypeInput.addEventListener('change', () => updateLoadOptions());
+    function showLoaderMenu(index, event) {
+      activeLoader = index;
+      const config = loaderDefaults[index] || { contents:'both', cupFace:'open', pinType:alliance+'-yellow', insertColor:'yellow' };
+      contentsInput.value = config.contents; cupFaceInput.value = config.cupFace; pinTypeInput.value = config.pinType;
+      updateLoadOptions(config.insertColor);
+      document.getElementById('saveDefault').checked = true;
+      document.getElementById('loaderTitle').textContent = `Match loader ${index + 1}`;
+      document.getElementById('removeDefault').disabled = loaderDefaults[index] === null;
+      loaderMenu.hidden = false;
+      const field = document.querySelector('.field').getBoundingClientRect();
+      const menuWidth = loaderMenu.offsetWidth, menuHeight = loaderMenu.offsetHeight;
+      loaderMenu.style.left = `${clamp(event.clientX - field.left + 12, 0, Math.max(0,field.width - menuWidth))}px`;
+      loaderMenu.style.top = `${clamp(event.clientY - field.top + 12, 0, Math.max(0,field.height - menuHeight))}px`;
+      contentsInput.focus();
+    }
+    function addMatchLoad(index, config) {
+      if (matchLoads.filter(load => load.loader === index).length >= maxLoadsPerLoader) {
+        setMessage('This loader preview is full (16 loads). Edit the loader to clear its loads.'); return false;
+      }
+      matchLoads.push({id:crypto.randomUUID(),loader:index, config:{...config}});
+      setMessage(); draw(); return true;
+    }
+    function currentLoadConfig() {
+      return {contents:contentsInput.value, cupFace:cupFaceInput.value, pinType:pinTypeInput.value, insertColor:insertInput.value};
+    }
+    document.getElementById('addLoad').addEventListener('click', () => {
+      const config = currentLoadConfig();
+      if (!validLoadConfig(config)) { setMessage('Invalid match load configuration.'); return; }
+      if (document.getElementById('saveDefault').checked) loaderDefaults[activeLoader] = {...config};
+      if (addMatchLoad(activeLoader, config)) loaderMenu.hidden = true;
+    });
+    document.getElementById('setDefault').addEventListener('click', () => {
+      const config = currentLoadConfig();
+      if (!validLoadConfig(config)) { setMessage('Invalid match load configuration.'); return; }
+      loaderDefaults[activeLoader] = config;
+      loaderMenu.hidden = true; setMessage('Match loader default saved.');
+    });
+    document.getElementById('clearLoads').addEventListener('click', () => {
+      matchLoads = matchLoads.filter(load => load.loader !== activeLoader);
+      setMessage(); draw();
+    });
+    document.getElementById('removeDefault').addEventListener('click', () => {
+      loaderDefaults[activeLoader] = null;
+      document.getElementById('removeDefault').disabled = true;
+      document.getElementById('saveDefault').checked = false;
+    });
+    document.getElementById('closeLoader').addEventListener('click', () => { loaderMenu.hidden = true; });
+    function loaderAt(event, view) {
+      const target = view === '2d' ? canvas : canvas3d, rect = target.getBoundingClientRect();
+      const px = (event.clientX - rect.left) / rect.width * 1000, py = (event.clientY - rect.top) / rect.height * 1000;
+      let closest = 30, result = -1;
+      for (const [i,[x,y]] of loaders.entries()) {
+        let ax, ay, bx, by;
+        if (view === '2d') { ax = bx = x/144*1000; ay = by = (1-y/144)*1000; }
+        else {
+          const dx=x-72, dy=y-72, c=Math.cos(orbitAngle), s=Math.sin(orbitAngle), scale=4.1*zoom;
+          const horizontal=c*dx-s*dy, depth=s*dx+c*dy;
+          ax=bx=500+horizontal*scale; ay=545+depth*Math.sin(orbitPitch)*scale;
+          by=ay-14*Math.cos(orbitPitch)*scale;
+        }
+        const vx=bx-ax, vy=by-ay, length=vx*vx+vy*vy;
+        const t=length ? clamp(((px-ax)*vx+(py-ay)*vy)/length,0,1) : 0;
+        const distance=Math.hypot(px-(ax+t*vx),py-(ay+t*vy));
+        if (distance < closest) { closest=distance; result=i; }
+      }
+      return result;
+    }
+    function handleLoader(event, forceMenu = false) {
+      const index = loaderAt(event, event.currentTarget === canvas ? '2d' : '3d');
+      if (index < 0) return false;
+      if (forceMenu && placingRobot) setPlacing(false);
+      if (forceMenu || editingLoader || !loaderDefaults[index]) showLoaderMenu(index,event);
+      else addMatchLoad(index, loaderDefaults[index]);
+      setEditingLoader(false);
+      return true;
+    }
+    for (const target of [canvas,canvas3d]) target.addEventListener('contextmenu', event => {
+      if (handleLoader(event, true)) event.preventDefault();
+    });
+    function updateAlliance() {
+      const current = alliance === 'red' ? 'Red' : 'Blue';
+      const next = alliance === 'red' ? 'Blue' : 'Red';
+      const description = `Next robot: ${current} alliance. Switch to ${next}`;
+      allianceButton.setAttribute('aria-label', description);
+      allianceButton.title = description;
+      document.getElementById('allianceLabel').textContent = current.toUpperCase();
+      document.getElementById('allianceSwatch').style.background = allianceColors[alliance];
+    }
+    allianceButton.addEventListener('click', () => {
+      alliance = alliance === 'red' ? 'blue' : 'red';
+      updateAlliance(); draw();
+    });
+    function setPlacing(value) {
+      placingRobot = value;
+      placeButton.setAttribute('aria-pressed', String(value));
+      placeButton.classList.toggle('primary', value);
+      canvas3d.classList.toggle('placing', value);
+      updateViewHint();
+    }
+    function checkRobotCapacity() {
+      if (robots.length < 4) return true;
+      showTopError('Cannot place robot: all 4 slots are filled (2 per alliance). Remove a robot first.');
+      setPlacing(false); return false;
+    }
+    placeButton.addEventListener('click', () => {
+      if (!placingRobot && !checkRobotCapacity()) return;
+      showTopError(); setEditingLoader(false); loaderMenu.hidden = true; setPlacing(!placingRobot); setMessage();
+    });
+    function updateHeadingDial() {
+      const degrees = Number(headingInput.value);
+      if (headingInput.value.trim() === '' || !Number.isFinite(degrees) || degrees < 0 || degrees >= 360) return;
+      const angle = degrees * Math.PI / 180;
+      const x = 120 + 80 * Math.cos(angle), y = 120 - 80 * Math.sin(angle);
+      document.getElementById('headingLine').setAttribute('x2', x);
+      document.getElementById('headingLine').setAttribute('y2', y);
+      document.getElementById('headingTip').setAttribute('cx', x);
+      document.getElementById('headingTip').setAttribute('cy', y);
+    }
+    function chooseHeading(event) {
+      const rect = headingDial.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width * 240 - 120;
+      const y = 120 - (event.clientY - rect.top) / rect.height * 240;
+      if (Math.hypot(x, y) < 5) return;
+      let degrees = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+      const snapped = Math.round(degrees / 45) * 45;
+      if (Math.abs(degrees - snapped) <= 6) degrees = snapped % 360;
+      headingInput.value = String(Math.round(degrees * 10) / 10 % 360);
+      updateHeadingDial();
+    }
+    headingDial.addEventListener('pointerdown', event => { headingDial.setPointerCapture(event.pointerId); chooseHeading(event); });
+    headingDial.addEventListener('pointermove', event => { if (headingDial.hasPointerCapture(event.pointerId)) chooseHeading(event); });
+    headingInput.addEventListener('input', updateHeadingDial);
+    function selectRobotPosition(point) {
+      if (!checkRobotCapacity()) return;
+      pendingRobot = point;
+      headingInput.value = '0';
+      updateHeadingDial();
+      headingDialog.showModal();
+      headingInput.focus();
+    }
+    document.getElementById('confirmHeading').addEventListener('click', () => {
+      if (!headingInput.reportValidity() || headingInput.value.trim() === '') return;
+      const heading = Number(headingInput.value);
+      if (!Number.isFinite(heading) || heading < 0 || heading >= 360) return;
+      if (!checkRobotCapacity()) {headingDialog.close(); return;}
+      syncRobot();
+      const switched=robots.filter(robot=>robot.alliance===alliance).length>=2;
+      if (switched) {alliance=alliance==='red'?'blue':'red'; updateAlliance();}
+      const id=[1,2,3,4].map(number=>`robot-${number}`).find(id=>!robots.some(robot=>robot.id===id));
+      const robot={id,alliance,points:[{...pendingRobot}],startHeading:heading,progress:0};
+      robots.push(robot);
+      activateRobot(id);
+      selected=0; setPlacing(false); showTopError();
+      setMessage(switched ? `Selected alliance was full. Placed a ${alliance} robot.` : '');
+      headingDialog.close();
+    });
+    document.getElementById('cancelHeading').addEventListener('click', () => headingDialog.close());
+    headingDialog.addEventListener('close', () => { pendingRobot = null; });
+    function screenToField3d(event) {
+      const rect = canvas3d.getBoundingClientRect(), scale = 4.1 * zoom;
+      const horizontal = ((event.clientX - rect.left) / rect.width * 1000 - 500) / scale;
+      const depth = ((event.clientY - rect.top) / rect.height * 1000 - 545) / (scale * Math.sin(orbitPitch));
+      const x = 72 + Math.cos(orbitAngle) * horizontal + Math.sin(orbitAngle) * depth;
+      const y = 72 - Math.sin(orbitAngle) * horizontal + Math.cos(orbitAngle) * depth;
+      if (x < 0 || x > 144 || y < 0 || y > 144) return null;
+      return { x: x / 144 * settings.size, y: y / 144 * settings.size };
+    }
+    document.getElementById('view2d').addEventListener('click', () => selectView('2d'));
+    document.getElementById('view3d').addEventListener('click', () => selectView('3d'));
+    canvas3d.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      if (placingRobot) {
+        const point = screenToField3d(event);
+        if (!point) { setMessage('Choose a position on the field.'); return; }
+        setMessage(); selectRobotPosition(point); return;
+      }
+      if (handleLoader(event)) return;
+      if (editingLoader) { setMessage('Select one of the four corner loaders.'); return; }
+      if (flipClickedToggle(event)) return;
+      if (attachClickedPiece(event)) return;
+      orbitPointer = { x: event.clientX, y: event.clientY };
+      canvas3d.setPointerCapture(event.pointerId);
+    });
+    canvas3d.addEventListener('pointermove', event => {
+      if (!orbitPointer) return;
+      orbitAngle += (event.clientX - orbitPointer.x) * .008;
+      orbitPitch = clamp(orbitPitch + (event.clientY - orbitPointer.y) * .008, .2, 1.45);
+      orbitPointer = { x: event.clientX, y: event.clientY };
+      draw3d();
+    });
+    canvas3d.addEventListener('pointerup', () => { orbitPointer = null; });
+    canvas3d.addEventListener('pointercancel', () => { orbitPointer = null; });
+    canvas3d.addEventListener('wheel', event => {
+      event.preventDefault();
+      zoom = clamp(zoom * Math.exp(-event.deltaY * .001), .55, 2);
+      draw3d();
+    }, { passive: false });
+    canvas.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      const p = pointerPosition(event);
+      if (placingRobot) { selectRobotPosition(toField(p.x, p.y)); return; }
+      if (handleLoader(event)) return;
+      if (editingLoader) { setMessage('Select one of the four corner loaders.'); return; }
+      if (flipClickedToggle(event)) return;
+      if (attachClickedPiece(event)) return;
+      if (!activeRobotId) {setMessage('Use the robot button to place a robot before editing a path.'); return;}
+      let nearest = -1, closest = 22;
+      points.forEach((point, i) => {
+        const screen = toCanvas(point), distance = Math.hypot(screen.x - p.x, screen.y - p.y);
+        if (distance < closest) { closest = distance; nearest = i; }
+      });
+      stop(); progress = 0;
+      if (nearest < 0) { points.push(toField(p.x, p.y)); nearest = points.length - 1; }
+      selected = nearest; dragging = true; canvas.setPointerCapture(event.pointerId);
+      setMessage(); rebuild();
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (!dragging || selected < 0) return;
+      const p = pointerPosition(event);
+      points[selected] = toField(p.x, p.y); rebuild();
+    });
+    function endDrag() { dragging = false; }
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !loaderMenu.hidden) { loaderMenu.hidden = true; return; }
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selected >= 0 && loaderMenu.hidden && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+        if (points.length<=1) {event.preventDefault(); setMessage('Use Remove active robot to remove its starting point.'); return;}
+        event.preventDefault(); if (selected === 0) startHeading = null;
+        points.splice(selected, 1); selected = -1; stop(); progress = 0; rebuild();
+      }
+    });
+    playButton.addEventListener('click', () => {
+      if (playing) { stop(); return; }
+      if (progress >= total) progress = 0;
+      playing = true; previousTime = null; playButton.textContent = 'Pause preview';
+    });
+    document.getElementById('restart').addEventListener('click', () => { stop(); progress = 0; draw(); });
+    document.getElementById('undo').addEventListener('click', () => { if (points.length>1) points.pop(); selected = -1; stop(); progress = 0; rebuild(); });
+    document.getElementById('clear').addEventListener('click', () => { points = points.slice(0,1); selected = -1; stop(); progress = 0; rebuild(); });
+    Object.entries(inputs).forEach(([key, input]) => input.addEventListener('change', () => {
+      const value = Number(input.value), [min, max] = limits[key];
+      if (input.value.trim() === '' || !Number.isFinite(value) || value < min || value > max) {
+        input.value = settings[key]; setMessage(`${key} must be between ${min} and ${max}.`); return;
+      }
+      if (key === 'size' && robots.some(robot=>robot.points.some(p => p.x > value || p.y > value))) {
+        input.value = settings.size; setMessage('Field is too small for existing waypoints. Move them first.'); return;
+      }
+      settings[key] = value; setMessage(); stop(); progress = 0; rebuild();
+    }));
+    document.getElementById('image').addEventListener('change', event => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader=new FileReader(), scene=activeScene;
+      reader.onload=()=>{
+        if (scene!==activeScene || sceneTransition) {setMessage('Image upload cancelled because the scene changed.'); return;}
+        if (typeof reader.result!=='string' || !/^data:image\/(?:png|jpeg|webp|gif|bmp|avif);base64,/.test(reader.result)) {
+          setMessage('Choose a PNG, JPEG, WebP, GIF, BMP, or AVIF field image.'); return;
+        }
+        loadSceneImage(reader.result);
+        saveCurrentScene();
+      };
+      reader.onerror=()=>setMessage('Could not read the field image.');
+      reader.readAsDataURL(file);
+    });
+    document.getElementById('save').addEventListener('click', () => {
+      saveCurrentScene();
+      download('v5-path-project.json', JSON.stringify(sceneProject(), null, 2), 'application/json');
+    });
+    document.getElementById('export').addEventListener('click', () => {
+      if (samples.length < 2 || total < 0.001) { setMessage('Add at least two distinct waypoints before exporting.'); return; }
+      const rows = samples.map((p, i) => `${p.x.toFixed(3)},${p.y.toFixed(3)},${(i === 0 && startHeading !== null ? startHeading : angleAt(i) * 180 / Math.PI).toFixed(2)},${p.distance.toFixed(3)}`);
+      download('v5-path.csv', 'x_in,y_in,heading_deg,distance_in\n' + rows.join('\n') + '\n', 'text/csv');
+      setMessage();
+    });
+    function decodeSnapshot(project) {
+        if (!project || project.version !== 1 || project.units !== 'inches' || !project.settings || !Array.isArray(project.waypoints)) throw new Error('Unsupported project format.');
+        for (const [key, [min, max]] of Object.entries(limits)) {
+          const value = project.settings[key];
+          if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) throw new Error(`Invalid ${key} setting.`);
+        }
+        if (!project.waypoints.every(p => p && typeof p.x === 'number' && typeof p.y === 'number' && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.y >= 0 && p.x <= project.settings.size && p.y <= project.settings.size)) throw new Error('Invalid waypoint coordinates.');
+        if (project.startHeading != null && (typeof project.startHeading !== 'number' || !Number.isFinite(project.startHeading) || project.startHeading < 0 || project.startHeading >= 360 || !project.waypoints.length)) throw new Error('Invalid starting heading.');
+        if (project.alliance !== undefined && project.alliance !== 'red' && project.alliance !== 'blue') throw new Error('Invalid alliance color.');
+        if (project.toggleStates !== undefined && (!Array.isArray(project.toggleStates) || project.toggleStates.length!==4 || !project.toggleStates.every(state=>Number.isInteger(state)&&state>=0&&state<3))) throw new Error('Invalid wall toggles.');
+        if (project.fieldImage != null && (typeof project.fieldImage!=='string' || !/^data:image\/(?:png|jpeg|webp|gif|bmp|avif);base64,/.test(project.fieldImage))) throw new Error('Unsupported field image in project.');
+        if (project.loaderDefaults !== undefined && (!Array.isArray(project.loaderDefaults) || project.loaderDefaults.length !== 4 || !project.loaderDefaults.every(config => config === null || validLoadConfig(config)))) throw new Error('Invalid match loader defaults.');
+        if (project.matchLoads !== undefined && (!Array.isArray(project.matchLoads) || !project.matchLoads.every(load => load && Number.isInteger(load.loader) && load.loader >= 0 && load.loader < 4 && validLoadConfig(load.config) && (load.attached === undefined || typeof load.attached === 'boolean')) || loaders.some((_,i) => project.matchLoads.filter(load => load.loader === i).length > maxLoadsPerLoader))) throw new Error('Invalid match loads.');
+        if (project.fieldAttachments !== undefined && (!Array.isArray(project.fieldAttachments) || !project.fieldAttachments.every(id=>fieldItems.some(item=>item.id===id)) || new Set(project.fieldAttachments).size!==project.fieldAttachments.length)) throw new Error('Invalid attached field pieces.');
+        const validPoints = path => Array.isArray(path) && path.length>0 && path.every(p=>p && typeof p.x==='number' && typeof p.y==='number' && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.y>=0 && p.x<=project.settings.size && p.y<=project.settings.size);
+        const validHeading = heading => heading===null || (typeof heading==='number' && Number.isFinite(heading) && heading>=0 && heading<360);
+        let nextRobots;
+        if (project.robots !== undefined) {
+          if (!Array.isArray(project.robots) || project.robots.length>4 || !project.robots.every(robot=>robot && /^robot-[1-4]$/.test(robot.id) && typeof robot.id==='string' && ['red','blue'].includes(robot.alliance) && validPoints(robot.points) && validHeading(robot.startHeading) && typeof robot.progress==='number' && Number.isFinite(robot.progress) && robot.progress>=0 && robot.progress<=samplePath(robot.points).total+1e-6) || new Set(project.robots.map(robot=>robot.id)).size!==project.robots.length || ['red','blue'].some(color=>project.robots.filter(robot=>robot.alliance===color).length>2)) throw new Error('Invalid robots: maximum 4 total and 2 per alliance.');
+          nextRobots=project.robots.map(robot=>({id:robot.id,alliance:robot.alliance,points:robot.points.map(({x,y})=>({x,y})),startHeading:robot.startHeading,progress:robot.progress}));
+        } else {
+          nextRobots=project.waypoints.length ? [{id:'robot-1',alliance:project.alliance || 'red',points:project.waypoints.map(({x,y})=>({x,y})),startHeading:project.startHeading ?? null,progress:0}] : [];
+        }
+        if (project.activeRobotId !== undefined && project.activeRobotId !== null && !nextRobots.some(robot=>robot.id===project.activeRobotId)) throw new Error('Invalid active robot.');
+        const nextActive=project.activeRobotId ?? nextRobots[0]?.id ?? null;
+        const nextAttachments=new Set(project.fieldAttachments || []);
+        const nextOwners={};
+        if (project.fieldOwners !== undefined && (!project.fieldOwners || typeof project.fieldOwners!=='object' || Array.isArray(project.fieldOwners) || Object.entries(project.fieldOwners).some(([id,owner])=>!nextAttachments.has(id) || !nextRobots.some(robot=>robot.id===owner)))) throw new Error('Invalid attachment owners.');
+        for (const id of nextAttachments) {
+          const owner=project.fieldOwners?.[id] ?? (project.robots === undefined ? nextActive : null);
+          if (!nextRobots.some(robot=>robot.id===owner)) throw new Error('Attached field piece requires a robot.');
+          nextOwners[id]=owner;
+        }
+        const nextLoads=(project.matchLoads || []).map(load=>{
+          const owner=load.attached ? load.robotId ?? (project.robots === undefined ? nextActive : null) : null;
+          if (load.attached && !nextRobots.some(robot=>robot.id===owner)) throw new Error('Attached match load requires a robot.');
+          if (load.id !== undefined && (typeof load.id!=='string' || !load.id || fieldItems.some(item=>item.id===load.id))) throw new Error('Invalid match load ID.');
+          return {id:load.id || crypto.randomUUID(),loader:load.loader,config:{...load.config},attached:load.attached===true,...(load.attached ? {robotId:owner} : {})};
+        });
+        if (new Set(nextLoads.map(load=>load.id)).size!==nextLoads.length) throw new Error('Duplicate match load IDs.');
+        return {
+          version:1,units:'inches',settings:Object.fromEntries(Object.keys(limits).map(key => [key, project.settings[key]])),
+          robots:nextRobots,activeRobotId:nextActive,alliance:project.alliance ?? 'red',
+          waypoints:nextRobots.find(robot=>robot.id===nextActive)?.points || [],
+          startHeading:nextRobots.find(robot=>robot.id===nextActive)?.startHeading ?? null,
+          loaderDefaults:project.loaderDefaults ? project.loaderDefaults.map(config=>config && {...config}) : [null,null,null,null],
+          matchLoads:nextLoads,fieldAttachments:[...nextAttachments],fieldOwners:nextOwners,
+          toggleStates:project.toggleStates ? [...project.toggleStates] : [0,0,0,0],fieldImage:project.fieldImage || null
+        };
+    }
+    function applySnapshot(snapshot) {
+        const project=structuredClone(snapshot);
+        settings=project.settings; robots=project.robots; activeRobotId=null;
+        alliance=project.alliance; updateAlliance();
+        loaderDefaults=project.loaderDefaults; matchLoads=project.matchLoads;
+        fieldAttachments=new Set(project.fieldAttachments); fieldOwners=project.fieldOwners;
+        toggleStates=project.toggleStates;
+        loadSceneImage(project.fieldImage);
+        loaderMenu.hidden = true; setEditingLoader(false);
+        setPlacing(false); showTopError();
+        Object.entries(inputs).forEach(([key, input]) => { input.value = settings[key]; });
+        setMessage(); activateRobot(project.activeRobotId);
+    }
+    document.getElementById('load').addEventListener('change', async event => {
+      const file=event.target.files[0];
+      if (!file) return;
+      try {
+        const project=JSON.parse(await file.text());
+        importSceneProject(project);
+      } catch (error) { setMessage(`Could not open project: ${error.message}`); }
+      event.target.value = '';
+    });
+    function loadSceneImage(data) {
+      fieldImageData=data;
+      const request=++imageRequest;
+      fieldImage=null;
+      if (!data) return;
+      const image=new Image();
+      image.onload=()=>{if(request===imageRequest) {fieldImage=image; draw();}};
+      image.onerror=()=>{if(request===imageRequest) setMessage('Could not decode the saved field image.');};
+      image.src=data;
+    }
+    function snapshotScene() {
+      syncRobot();
+      return structuredClone({
+        version:1,units:'inches',settings,waypoints:points,startHeading,alliance,robots,activeRobotId,
+        loaderDefaults,matchLoads,fieldAttachments:[...fieldAttachments],fieldOwners,toggleStates,fieldImage:fieldImageData
+      });
+    }
+    function saveCurrentScene() {
+      if (restoringScene || sceneTransition) return;
+      scenes[activeScene]=snapshotScene();
+      clearTimeout(storageTimer);
+      if (!storageFailed) storageTimer=setTimeout(persistScenes,350);
+    }
+    function sceneProject() {
+      return {...scenes[activeScene],scenes,activeScene};
+    }
+    function persistScenes() {
+      try {localStorage.setItem(storageKey,JSON.stringify(sceneProject()));}
+      catch (error) {
+        storageFailed=true;
+        showTopError(`Browser autosave failed: ${error.message}. Use Save project to keep your scenes.`);
+      }
+    }
+    function importSceneProject(project) {
+      let nextScenes, index=0;
+      if (project?.scenes !== undefined) {
+        if (!Array.isArray(project.scenes) || project.scenes.length!==10 || !Number.isInteger(project.activeScene) || project.activeScene<0 || project.activeScene>=10) throw new Error('Invalid scene collection: expected 10 scenes.');
+        nextScenes=project.scenes.map(scene=>scene===null?null:decodeSnapshot(scene));
+        index=project.activeScene;
+        if (!nextScenes[index]) throw new Error('The active scene is missing.');
+      } else nextScenes=[decodeSnapshot(project),...Array(9).fill(null)];
+      restoringScene=true;
+      try {
+        sceneTransition=null; scenes=nextScenes; activeScene=index;
+        applySnapshot(scenes[activeScene]);
+      } finally {restoringScene=false;}
+      storageFailed=false;
+      updateSceneControls(); saveCurrentScene();
+    }
+    function updateSceneControls() {
+      document.querySelectorAll('#sceneButtons button').forEach((button,index)=>{
+        button.classList.toggle('primary',index===activeScene);
+        button.setAttribute('aria-pressed',String(index===activeScene));
+        button.title=`Scene ${index+1}${scenes[index] ? '' : ' (copies current scene on first visit)'}`;
+      });
+      document.getElementById('sceneStatus').textContent=sceneTransition
+        ? `Moving to scene ${activeScene+1}…`
+        : `Scene ${activeScene+1} · changes saved automatically`;
+      document.getElementById('finishTransition').disabled=!sceneTransition;
+    }
+    function blendPose(from,to,t) {
+      const angle=(to.angle-from.angle+Math.PI*3)%(Math.PI*2)-Math.PI;
+      return {x:from.x+(to.x-from.x)*t,y:from.y+(to.y-from.y)*t,z:(from.z || 0)+((to.z || 0)-(from.z || 0))*t,angle:from.angle+angle*t};
+    }
+    function normalizedRobotPose(robot,size) {
+      const pose=poseAt(robot.progress,samplePath(robot.points).samples,robot.startHeading);
+      return {...pose,x:pose.x/size*144,y:pose.y/size*144};
+    }
+    function sceneRoute(from,to,sourceRobot,targetRobot,sourceSize,targetSize) {
+      let best=null, bestCost=Infinity;
+      for (const [robot,size] of [[sourceRobot,sourceSize],[targetRobot,targetSize]]) {
+        if (!robot || robot.points.length<2) continue;
+        const path=samplePath(robot.points).samples.map(p=>({x:p.x/size*144,y:p.y/size*144}));
+        const nearest=point=>{
+          let index=0;
+          path.forEach((p,i)=>{if(Math.hypot(p.x-point.x,p.y-point.y)<Math.hypot(path[index].x-point.x,path[index].y-point.y)) index=i;});
+          return index;
+        };
+        const a=nearest(from), b=nearest(to);
+        if (a===b) continue;
+        const cost=Math.hypot(path[a].x-from.x,path[a].y-from.y)+Math.hypot(path[b].x-to.x,path[b].y-to.y);
+        if (cost<bestCost) {
+          bestCost=cost; best=path.slice(Math.min(a,b),Math.max(a,b)+1);
+          if (a>b) best.reverse();
+        }
+      }
+      const route=[from,...(best || []),to], samples=[];
+      let total=0;
+      route.forEach((p,i)=>{
+        if (i) total+=Math.hypot(p.x-route[i-1].x,p.y-route[i-1].y);
+        samples.push({...p,distance:total});
+      });
+      return {from,to,samples,total};
+    }
+    function transitionRobotPose(id) {
+      const route=sceneTransition.routes.get(id), t=sceneTransition.t;
+      if (!route) return null;
+      if (route.total<1e-8) return blendPose(route.from,route.to,t);
+      const distance=route.total*t;
+      let i=1;
+      while(i<route.samples.length-1 && route.samples[i].distance<distance) i++;
+      const a=route.samples[i-1], b=route.samples[i];
+      const fraction=b.distance===a.distance?0:(distance-a.distance)/(b.distance-a.distance);
+      const pose=blendPose(route.from,route.to,t);
+      pose.x=a.x+(b.x-a.x)*fraction; pose.y=a.y+(b.y-a.y)*fraction;
+      return pose;
+    }
+    function displayRobots() {
+      return sceneTransition ? sceneTransition.robots : robots;
+    }
+    function robotOpacity(id) {
+      if (!sceneTransition) return 1;
+      const {sourceIds,targetIds,t}=sceneTransition;
+      return sourceIds.has(id)&&targetIds.has(id)?1:sourceIds.has(id)?1-t:t;
+    }
+    const transitionControls=new Map();
+    function lockTransitionControls() {
+      transitionControls.clear();
+      document.querySelectorAll('main button, main input, main select').forEach(control=>{
+        if (['finishTransition','view2d','view3d'].includes(control.id)) return;
+        transitionControls.set(control,control.disabled); control.disabled=true;
+      });
+    }
+    function unlockTransitionControls() {
+      for (const [control,disabled] of transitionControls) control.disabled=disabled;
+      transitionControls.clear();
+    }
+    function finishSceneTransition() {
+      if (!sceneTransition) return;
+      sceneTransition=null;
+      unlockTransitionControls(); updateSceneControls(); draw();
+    }
+    function switchScene(index) {
+      if (!Number.isInteger(index)||index<0||index>=10||index===activeScene||sceneTransition) return;
+      stop(); syncRobot(); saveCurrentScene();
+      const source=snapshotScene(), sourceItems=new Map();
+      eachRawPositionedItem((item,p)=>sourceItems.set(item.id,{item,p}));
+      const destination=scenes[index] || structuredClone(source);
+      restoringScene=true;
+      try {activeScene=index; scenes[index]=structuredClone(destination); applySnapshot(destination);}
+      finally {restoringScene=false;}
+      const items=new Map();
+      for (const [id,entry] of sourceItems) items.set(id,{from:entry});
+      eachRawPositionedItem((item,p)=>{
+        if (!items.has(item.id)) items.set(item.id,{});
+        items.get(item.id).to={item,p};
+      });
+      const sourceIds=new Set(source.robots.map(robot=>robot.id)), targetIds=new Set(robots.map(robot=>robot.id));
+      const routes=new Map(), renderRobots=[...robots];
+      source.robots.forEach(robot=>{if(!targetIds.has(robot.id)) renderRobots.push(robot);});
+      for (const robot of renderRobots) {
+        const fromRobot=source.robots.find(r=>r.id===robot.id), toRobot=robots.find(r=>r.id===robot.id);
+        const from=fromRobot?normalizedRobotPose(fromRobot,source.settings.size):normalizedRobotPose(toRobot,settings.size);
+        const to=toRobot?normalizedRobotPose(toRobot,settings.size):from;
+        routes.set(robot.id,sceneRoute(from,to,fromRobot,toRobot,source.settings.size,settings.size));
+      }
+      const longest=Math.max(0,...[...routes.values()].map(route=>route.total),...Array.from(items.values(),entry=>{
+        if(!entry.from||!entry.to) return 0;
+        return Math.hypot(entry.to.p.x-entry.from.p.x,entry.to.p.y-entry.from.p.y);
+      }));
+      sceneTransition={routes,items,robots:renderRobots,sourceIds,targetIds,t:0,started:null,duration:Math.max(500,longest/(settings.speed*144/settings.size)*1000)};
+      lockTransitionControls(); updateSceneControls(); draw();
+    }
+    for (let index=0;index<10;index++) {
+      const button=document.createElement('button');
+      button.textContent=String(index+1);
+      button.addEventListener('click',()=>switchScene(index));
+      document.getElementById('sceneButtons').append(button);
+    }
+    document.getElementById('finishTransition').addEventListener('click',finishSceneTransition);
+    for (const event of ['pointerdown','keydown','change','input']) document.addEventListener(event,e=>{
+      if (sceneTransition && (e.target===canvas||e.target===canvas3d||(event==='keydown'&&!['finishTransition','view2d','view3d'].includes(e.target.id)))) {
+        e.preventDefault(); e.stopImmediatePropagation();
+      }
+    },true);
+    for (const event of ['click','change','input','pointerup','keyup']) document.addEventListener(event,()=>queueMicrotask(saveCurrentScene));
+    window.addEventListener('pagehide',()=>{saveCurrentScene(); if(!storageFailed) persistScenes();});
+    updateAlliance();
+    updateRobotControls();
+    restoringScene=true;
+    rebuild();
+    restoringScene=false;
+    try {
+      const stored=localStorage.getItem(storageKey);
+      if (stored) importSceneProject(JSON.parse(stored));
+      else {saveCurrentScene(); updateSceneControls();}
+    } catch (error) {
+      storageFailed=true;
+      showTopError(`Could not restore browser autosave: ${error.message}. Open a saved project to recover it.`);
+      scenes[activeScene]=snapshotScene(); updateSceneControls();
+    }
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
