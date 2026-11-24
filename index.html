@@ -11,30 +11,36 @@
     header { padding: 18px 24px; border-bottom: 1px solid #293447; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
     h1 { font-size: 20px; margin: 0; letter-spacing: -.02em; }
     header span, .muted { color: #9cacc1; font-size: 13px; }
-    main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; max-width: 1400px; margin: auto; padding: 20px; }
-    .field-wrap { min-width: 0; }
-    .field { width: min(100%, 900px); margin: auto; display: grid; grid-template-columns: minmax(0, 850px) 48px; gap: 8px; align-items: start; position: relative; }
+    main { display: grid; grid-template-columns: 280px minmax(0, 1fr); align-items: start; }
+    .field-wrap { grid-column: 2; grid-row: 1; min-width: 0; padding: 20px; }
+    .field { width: min(100%, 1000px, calc(100dvh - 195px)); margin: auto; position: relative; }
     .field-canvas { min-width: 0; }
     canvas { display: block; width: 100%; aspect-ratio: 1; background: #152437; border: 1px solid #53667c; border-radius: 8px; touch-action: none; cursor: crosshair; }
     canvas[hidden] { display: none; }
     #field3d { cursor: grab; }
     #field3d:active { cursor: grabbing; }
-    .view-controls { width: min(100%, 850px); margin: 0 auto 10px; }
-    .field-tools { display: grid; gap: 8px; }
-    .field-tools button { width: 48px; padding: 9px; }
-    .field-tools svg { display: block; width: 28px; height: 28px; }
-    .field-tools #alliance { padding: 6px 2px; font-size: 10px; font-weight: bold; }
-    .alliance-swatch { display: block; width: 22px; height: 22px; margin: 0 auto 4px; border: 2px solid #e7edf7; border-radius: 50%; }
-    .field-tools #editLoader { padding: 6px 2px; font-size: 10px; font-weight: bold; }
+    .view-controls { margin: 0 auto 16px; justify-content: center; }
+    .tool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .tool-grid button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; min-height: 74px; padding: 8px 3px; font-size: 11px; }
+    .tool-grid svg { display: block; width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .alliance-swatch { display: block; width: 26px; height: 26px; border: 2px solid #e7edf7; border-radius: 50%; }
     .loader-menu { position: absolute; z-index: 3; width: min(260px, 90%); padding: 14px; border: 1px solid #647890; border-radius: 8px; background: #151e2c; box-shadow: 0 8px 24px #0009; }
     .loader-menu[hidden] { display: none; }
     .loader-menu select { width: 100%; background: #0d1521; color: #fff; border: 1px solid #43536b; border-radius: 6px; padding: 7px; margin-bottom: 10px; }
     .loader-menu label.checkbox { display: flex; align-items: center; gap: 6px; margin: 3px 0 10px; }
     #field3d.placing { cursor: crosshair; }
     .hint { margin: 10px auto 0; max-width: 850px; line-height: 1.5; }
-    aside { display: grid; align-content: start; gap: 14px; }
-    .card { background: #151e2c; border: 1px solid #2c394b; border-radius: 10px; padding: 15px; }
-    h2 { font-size: 14px; margin: 0 0 12px; color: #dce8f8; }
+    aside { grid-column: 1; grid-row: 1; display: grid; align-content: start; background: #101a28; border-right: 1px solid #43536b; max-height: calc(100dvh - 61px); overflow-y: auto; position: sticky; top: 0; }
+    .card { border-bottom: 1px solid #2c394b; padding: 18px 16px; }
+    h2, summary { font-size: 18px; font-weight: 650; margin: 0 0 14px; color: #dce8f8; }
+    summary { cursor: pointer; margin: 0; }
+    details[open] > summary { margin-bottom: 16px; }
+    button:focus-visible, summary:focus-visible { outline: 3px solid #52e4d1; outline-offset: 3px; }
+    .playback { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 14px; }
+    #play { font-weight: 650; }
+    #play::before { content: '\25b6'; margin-right: 8px; }
+    .full-button { width: 100%; margin-bottom: 8px; }
+    .tool-help { font-size: 12px; line-height: 1.5; margin: 12px 0 0; }
     label { display: block; font-size: 12px; color: #aab9cb; margin-bottom: 5px; }
     input[type=number] { width: 100%; background: #0d1521; color: white; border: 1px solid #43536b; border-radius: 6px; padding: 8px; font: inherit; }
     input[type=file] { width: 100%; font-size: 12px; color: #aab9cb; }
@@ -43,7 +49,7 @@
     .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
     button { border: 1px solid #43536b; border-radius: 6px; padding: 9px 11px; background: #253348; color: #ecf4ff; font: inherit; font-size: 13px; cursor: pointer; }
     button:hover { background: #344861; }
-    button.primary { background: #167c79; border-color: #239e98; }
+    button.primary { background: #196e8b; border-color: #288fac; }
     button:disabled { opacity: .45; cursor: not-allowed; }
     .stat { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
     .notice { font-size: 12px; line-height: 1.5; color: #f0c77c; }
@@ -52,7 +58,18 @@
     #robotSelect { width: 100%; padding: 8px; background: #0d1521; color: #fff; border: 1px solid #43536b; border-radius: 6px; margin-bottom: 10px; }
     #sceneButtons { display: grid; grid-template-columns: repeat(5,1fr); gap: 6px; }
     #sceneButtons button { padding: 8px 0; }
-    @media (max-width: 850px) { main { grid-template-columns: 1fr; } aside { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); } }
+    @media (max-width: 950px) and (min-width: 701px) { main { grid-template-columns: 240px minmax(0, 1fr); } .field-wrap { padding: 16px; } }
+    @media (max-width: 700px) {
+      main { display: flex; flex-direction: column; }
+      .field-wrap { order: 0; width: 100%; padding: 12px; }
+      .field { width: min(100%, 65dvh); }
+      aside { order: 1; position: static; max-height: none; overflow: visible; width: 100%; border-right: 0; border-top: 1px solid #43536b; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .card { min-width: 0; padding: 14px 12px; }
+      .tool-grid { gap: 5px; }
+      .tool-grid button { font-size: 10px; }
+      header { padding: 14px 16px; }
+    }
+    @media (max-width: 380px) { aside { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -64,26 +81,10 @@
         <button id="view2d" aria-pressed="false">2D path editor</button>
         <button id="view3d" class="primary" aria-pressed="true">3D field</button>
       </div>
-      <div class="view-controls buttons" aria-label="Field editing tools">
-        <button id="toolSelect" class="primary" aria-pressed="true">Select / waypoints</button>
-        <button id="toolDraw" aria-pressed="false">Draw</button>
-        <button id="toolLine" aria-pressed="false">Straight path</button>
-        <button id="undoDrawing">Undo drawing</button>
-        <button id="clearDrawings">Clear drawings</button>
-      </div>
       <div class="field">
         <div class="field-canvas">
           <canvas id="field" width="1000" height="1000" aria-label="Path planning field" hidden></canvas>
           <canvas id="field3d" width="1000" height="1000" aria-label="3D field preview"></canvas>
-        </div>
-        <div class="field-tools">
-          <button id="placeRobot" aria-label="Place robot start" aria-pressed="false" title="Place robot start">
-            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="7" y="7" width="18" height="18" rx="3"/><path d="M12 19h8M12 14h.1M20 14h.1M16 7V3M3 11v10M29 11v10M11 25v3M21 25v3"/></svg>
-          </button>
-          <button id="alliance" aria-label="Alliance: Red. Switch to Blue" title="Alliance: Red. Switch to Blue">
-            <span class="alliance-swatch" id="allianceSwatch" aria-hidden="true"></span><span id="allianceLabel">RED</span>
-          </button>
-          <button id="editLoader" aria-pressed="false" title="Edit a corner match loader">EDIT<br>LOAD</button>
         </div>
         <div id="loaderMenu" class="loader-menu" role="dialog" aria-labelledby="loaderTitle" hidden>
           <h2 id="loaderTitle">Match loader</h2>
@@ -107,7 +108,50 @@
       </div>
       <p class="hint muted" id="viewHint">Drag to orbit the 3D field; scroll to zoom. Switch to the 2D editor to add or move waypoints. The green arrow marks the robot's front.</p>
     </section>
-    <aside>
+    <aside aria-label="Planner controls">
+      <section class="card">
+        <h2>Tools</h2>
+        <div class="tool-grid" role="group" aria-label="Field editing tools">
+          <button id="toolSelect" class="primary" aria-pressed="true" title="Select objects or edit waypoints">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 4v23l6-6 5 9 5-3-5-8h9Z"/></svg>
+            <span>Select</span>
+          </button>
+          <button id="toolDraw" aria-pressed="false" title="Freehand drawing in the 2D editor">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><path d="m5 21 17-17 6 6-17 17-8 2Zm14-14 6 6M5 21l6 6"/></svg>
+            <span>Draw</span>
+          </button>
+          <button id="toolLine" aria-pressed="false" title="Create a straight robot path with two points">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="7" cy="25" r="4"/><circle cx="25" cy="7" r="4"/><path d="m10 22 12-12"/></svg>
+            <span>Straight path</span>
+          </button>
+          <button id="placeRobot" aria-label="Place robot start" aria-pressed="false" title="Place robot start">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="7" y="7" width="18" height="18" rx="3"/><path d="M12 19h8M12 14h.1M20 14h.1M16 7V3M3 11v10M29 11v10M11 25v3M21 25v3"/></svg>
+            <span>Robot</span>
+          </button>
+          <button id="alliance" aria-label="Alliance: Red. Switch to Blue" title="Alliance: Red. Switch to Blue">
+            <span class="alliance-swatch" id="allianceSwatch" aria-hidden="true"></span><span id="allianceLabel">RED</span>
+          </button>
+          <button id="editLoader" aria-pressed="false" title="Edit a corner match loader">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 4h20l-3 23H9ZM10 12h12M16 8v8M6 28h20"/></svg>
+            <span>Match load</span>
+          </button>
+        </div>
+        <p class="muted tool-help">Draw and Straight path open the 2D editor. Hold right-click on a robot to turn it.</p>
+      </section>
+      <section class="card">
+        <h2>Playback</h2>
+        <div class="playback">
+          <button class="primary" id="play">Play preview</button>
+          <button id="restart" title="Restart the active robot's preview">Restart</button>
+        </div>
+        <label for="robotSelect">Active robot / path</label>
+        <select id="robotSelect"><option value="">Place a robot to begin</option></select>
+        <p class="muted" id="robotCount">0 / 4 robots · Red 0 / 2 · Blue 0 / 2</p>
+        <div class="stat"><span class="muted">Waypoints</span><strong id="count">0</strong></div>
+        <div class="stat"><span class="muted">Path length</span><strong id="distance">0.0 in</strong></div>
+        <div class="stat"><span class="muted">Attached pieces</span><strong id="attachedCount">0</strong></div>
+        <div id="message" role="status" aria-live="polite"></div>
+      </section>
       <section class="card">
         <h2>Scenes</h2>
         <div id="sceneButtons" aria-label="Scenes"></div>
@@ -116,26 +160,31 @@
         <button id="finishTransition" disabled>Finish transition</button>
       </section>
       <section class="card">
-        <h2>Path controls</h2>
-        <label for="robotSelect">Active robot / path</label>
-        <select id="robotSelect"><option value="">Place a robot to begin</option></select>
-        <div class="buttons"><button id="removeRobot">Remove active robot</button></div>
-        <p class="muted" id="robotCount">0 / 4 robots · Red 0 / 2 · Blue 0 / 2</p>
-        <div class="buttons">
-          <button class="primary" id="play">Play preview</button>
-          <button id="restart">Restart</button>
-          <button id="undo">Remove last</button>
-          <button id="clear">Clear active path</button>
+        <h2>Remove &amp; return</h2>
+        <button id="clear" class="full-button">Clear active path</button>
+        <button id="removeRobot" class="full-button">Remove active robot</button>
+        <div class="tool-grid" role="group" aria-label="Undo and clear tools">
+          <button id="undo" title="Remove the last waypoint">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M12 7 4 15l8 8M5 15h15a8 8 0 0 1 0 16" transform="translate(0 -3)"/></svg>
+            <span>Waypoint</span>
+          </button>
+          <button id="undoDrawing" title="Undo the last drawing">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><path d="m4 20 9-9 10 10-7 7h-5ZM13 11l7-7 10 10-7 7M16 28h13"/></svg>
+            <span>Undo draw</span>
+          </button>
+          <button id="clearDrawings" title="Clear drawings in this scene">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 8h22M12 8V4h8v4M8 8l2 20h12l2-20M13 13v10M19 13v10"/></svg>
+            <span>Clear draws</span>
+          </button>
         </div>
-        <div class="stat"><span class="muted">Waypoints</span><strong id="count">0</strong></div>
-        <div class="stat"><span class="muted">Approx. path length</span><strong id="distance">0.0 in</strong></div>
-        <div class="stat"><span class="muted">Attached pieces</span><strong id="attachedCount">0</strong></div>
-        <button id="releaseRobotPiece">Return active robot's object</button>
-        <button id="releasePieces">Return attached pieces</button>
-        <div id="message" role="status" aria-live="polite"></div>
+        <div class="stack" style="margin-top:12px">
+          <button id="releaseRobotPiece">Return robot's object</button>
+          <button id="releasePieces">Return all carried objects</button>
+        </div>
       </section>
-      <section class="card stack">
-        <h2>Robot &amp; field</h2>
+      <details class="card">
+        <summary>Robot &amp; field settings</summary>
+        <div class="stack">
         <div class="grid">
           <div><label for="length">Robot length (in)</label><input id="length" type="number" min="4" max="48" step="0.5" value="18"></div>
           <div><label for="width">Robot width (in)</label><input id="width" type="number" min="4" max="48" step="0.5" value="18"></div>
@@ -143,14 +192,16 @@
           <div><label for="speed">Preview speed (in/s)</label><input id="speed" type="number" min="1" max="200" step="1" value="24"></div>
         </div>
         <div><label for="image">Optional 2D field image</label><input id="image" type="file" accept="image/*"></div>
-        <div class="muted">Use the red/blue button beside the field to choose the robot's alliance color. Click a corner tube to add a match load; right-click it or use EDIT LOAD to change its options.</div>
+        <div class="muted">Use the red/blue tool to choose the robot's alliance color. Click a corner tube to add a match load; right-click it or use Match load to change its options.</div>
         <div class="muted">Place up to four robots, two per alliance. Click a cup, pin, or cup-and-pin assembly to attach it to the nearest robot. Each robot carries one object at a time; a cup with a pin counts as one. Return a robot's object before picking up another.</div>
         <div class="muted">Draw creates field annotations. Straight path uses two clicks; the active robot's path connects to the first point and then travels straight to the second. Use Select / waypoints to interact with field objects.</div>
         <div class="muted">Click a wall toggle once to flip it: blue-side toggles cycle yellow → red → blue; red-side toggles cycle yellow → blue → red.</div>
         <div class="notice">Scoring areas and field elements are approximations based on the supplied images, not official dimensions. A custom 2D image does not change the 3D model.</div>
-      </section>
-      <section class="card stack">
-        <h2>Save &amp; export</h2>
+        </div>
+      </details>
+      <details class="card" open>
+        <summary>Save &amp; export</summary>
+        <div class="stack">
         <div class="buttons">
           <button id="save">Save project</button>
           <button id="export">Export path CSV</button>
@@ -158,7 +209,8 @@
         <div><label for="load">Open project JSON</label><input id="load" type="file" accept=".json,application/json"></div>
         <div class="muted">CSV exports the active robot's path (inches; 0° is +X, counterclockwise positive). The initial heading does not constrain the curve. Save project includes all 10 scenes and field images.</div>
         <div class="notice">Preview only: this is not a drivetrain controller or collision checker. Check robot clearance and test paths safely before use.</div>
-      </section>
+        </div>
+      </details>
     </aside>
   </main>
   <script>
@@ -917,8 +969,8 @@
         : aim?.mode==='rotate' ? 'Keep holding right-click and move around the robot to set its starting heading. Release to finish; Escape reverts.'
         : placingRobot
         ? 'Click the field to place a new robot. Up to two robots per alliance and four total. Click the robot button again to cancel.'
-        : editingLoader ? 'Click a corner match loader to edit its options. Click EDIT LOAD again to cancel.'
-        : tool==='draw' ? 'Drag on the field to draw an annotation. Use Undo drawing or Clear drawings to remove marks.'
+        : editingLoader ? 'Click a corner match loader to edit its options. Click Match load again to cancel.'
+        : tool==='draw' ? 'Drag on the field to draw an annotation. Use Undo draw or Clear draws under Remove & return to remove marks.'
         : tool==='line' ? (lineStart ? 'Click the second point to complete the straight path. Press Escape to cancel.' : 'Click the first point, then the second. The active robot connects to the first point with a straight segment.')
         : activeView === '3d'
         ? "Drag to orbit the 3D field; scroll to zoom. Switch to the 2D editor to add or move waypoints. The green arrow marks the robot's front. Hold right-click on a robot and move the mouse to turn it."

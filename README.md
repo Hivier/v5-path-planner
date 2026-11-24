@@ -10,18 +10,22 @@ available at https://hivier.github.io/v5-path-planner/.
 
 ## Controls
 
+- The left sidebar groups icon tools, playback, scenes, and removal controls.
+  Expand **Robot & field settings** for dimensions and image options; project
+  downloads and imports are under **Save & export**. On phones, the controls
+  sit below the field.
 - Switch between the 2D path editor and the orbitable 3D field.
 - Use the robot button, click a spot, then move the mouse around the heading dial and click to place (snaps to 45° and 90°; arrow keys turn 45°, Enter places, Escape cancels). You can also press, drag, and release.
   Up to two robots per alliance and four total are supported.
 - Hold right-click on a robot and move the mouse around it to change its starting heading. Release to finish; Escape reverts.
 - Select the active robot to edit, preview, or export its path.
 - In the 2D editor, choose **Draw** and drag to add a freehand annotation;
-  use **Undo drawing** or **Clear drawings** to remove annotations. Annotations
+  use **Undo draw** or **Clear draws** under **Remove & return** to remove annotations. Annotations
   appear in both views and are saved per scene, but are not robot paths.
 - Choose **Straight path**, then click two different points to append a straight
   segment to the active robot's path. If the first point differs from the path's
   end, a straight connector is added. Press Escape to cancel the first point.
-  Choose **Select / waypoints** to resume normal field interactions.
+  Choose **Select** to resume normal field interactions.
 - Click cups, pins, or cup-and-pin assemblies to attach them to the nearest robot.
   Each robot can carry one object; a cup with a pin counts as one. Return the
   active robot's object before picking up another.
