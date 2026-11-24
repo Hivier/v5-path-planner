@@ -67,6 +67,13 @@
         <button id="view2d" aria-pressed="false">2D path editor</button>
         <button id="view3d" class="primary" aria-pressed="true">3D field</button>
       </div>
+      <div class="view-controls buttons" aria-label="Field editing tools">
+        <button id="toolSelect" class="primary" aria-pressed="true">Select / waypoints</button>
+        <button id="toolDraw" aria-pressed="false">Draw</button>
+        <button id="toolLine" aria-pressed="false">Straight path</button>
+        <button id="undoDrawing">Undo drawing</button>
+        <button id="clearDrawings">Clear drawings</button>
+      </div>
       <div class="field">
         <div class="field-canvas">
           <canvas id="field" width="1000" height="1000" aria-label="Path planning field" hidden></canvas>
@@ -140,6 +147,7 @@
         <div><label for="image">Optional 2D field image</label><input id="image" type="file" accept="image/*"></div>
         <div class="muted">Use the red/blue button beside the field to choose the robot's alliance color. Click a corner tube to add a match load; right-click it or use EDIT LOAD to change its options.</div>
         <div class="muted">Place up to four robots, two per alliance. The side color button chooses the next robot's alliance. Edit, preview and export the active robot's path. Click a piece to attach it to the nearest robot; Return attached pieces restores all pickups.</div>
+        <div class="muted">Draw creates field annotations. Straight path uses two clicks; the active robot's path connects to the first point and then travels straight to the second. Use Select / waypoints to interact with field objects.</div>
         <div class="muted">Click a wall toggle once to flip it: blue-side toggles cycle yellow → red → blue; red-side toggles cycle yellow → blue → red.</div>
         <div class="notice">Field elements are approximations based on the supplied images, not official dimensions. A custom 2D image does not change the 3D model.</div>
       </section>
@@ -205,6 +213,7 @@
     let scenes = Array(10).fill(null), activeScene = 0, sceneTransition = null, restoringScene = false;
     let storageTimer = null, storageFailed = false;
     let fieldImageData = null, imageRequest = 0;
+    let drawings = [], drawing = null, lineStart = null, linePreview = null, tool = 'select';
     const storageKey = 'v5-path-studio-scenes-v1';
     const maxLoadsPerLoader = 16;
     const pinColors = { red: '#e83445', blue: '#08aadc', yellow: '#f4de24' };
@@ -244,6 +253,7 @@
     }
     function activateRobot(id) {
       syncRobot(); stop();
+      lineStart=null; linePreview=null;
       const robot=robots.find(robot=>robot.id===id);
       activeRobotId=robot ? robot.id : null;
       points=robot ? robot.points : []; startHeading=robot ? robot.startHeading : null;
@@ -279,7 +289,10 @@
         for (let j = 0; j <= resolution; j++) {
           if (i && j === 0) continue;
           const t = j / resolution;
-          const p = { x: spline(a.x, b.x, c.x, d.x, t), y: spline(a.y, b.y, c.y, d.y, t) };
+          const straight = c.straight === true;
+          const p = straight
+            ? {x:b.x+(c.x-b.x)*t, y:b.y+(c.y-b.y)*t, heading:Math.atan2(c.y-b.y,c.x-b.x)}
+            : {x:spline(a.x, b.x, c.x, d.x, t), y:spline(a.y, b.y, c.y, d.y, t)};
           if (samples.length) {
             const last = samples[samples.length - 1];
             total += Math.hypot(p.x - last.x, p.y - last.y);
@@ -314,7 +327,7 @@
       while (i < samples.length - 1 && samples[i].distance < distance) i++;
       const a = samples[i - 1], b = samples[i];
       const fraction = b.distance === a.distance ? 0 : (distance - a.distance) / (b.distance - a.distance);
-      return { x: a.x + (b.x - a.x) * fraction, y: a.y + (b.y - a.y) * fraction, angle: angleAt(i,samples) };
+      return { x: a.x + (b.x - a.x) * fraction, y: a.y + (b.y - a.y) * fraction, angle: b.heading ?? angleAt(i,samples) };
     }
     function robotPose(robot) {
       if (sceneTransition?.routes.has(robot.id)) {
@@ -673,6 +686,12 @@
       const faces = model3d.faces.slice();
       toggles.forEach((_,index)=>faces.push(...toggleFaces(index)));
       const dynamic = fieldGeometryHelpers(faces);
+      for (const stroke of drawings) {
+        if (stroke.length===1) dynamic.round(stroke[0].x*144,stroke[0].y*144,.15,.6,.6,.1,'#52e4d1',8);
+        for (let i=1;i<stroke.length;i++) {
+          dynamic.stripe(stroke[i-1].x*144,stroke[i-1].y*144,stroke[i].x*144,stroke[i].y*144,.8,'#52e4d1',.15);
+        }
+      }
       eachPositionedItem((item,p)=>faces.push(...positionedFaces(item,p)));
       const factor = 144 / settings.size;
       if (sceneTransition) {
@@ -744,6 +763,18 @@
       ctx.clearRect(0, 0, 1000, 1000);
       drawField2d();
       if (fieldImage) ctx.drawImage(fieldImage, 0, 0, 1000, 1000);
+      ctx.save();
+      ctx.strokeStyle='#52e4d1'; ctx.fillStyle='#52e4d1'; ctx.lineWidth=5; ctx.lineCap='round'; ctx.lineJoin='round';
+      for (const stroke of drawings) {
+        if (stroke.length===1) {
+          ctx.beginPath(); ctx.arc(stroke[0].x*1000,(1-stroke[0].y)*1000,2.5,0,Math.PI*2); ctx.fill();
+        } else {
+          ctx.beginPath();
+          stroke.forEach((point,index)=>{const x=point.x*1000,y=(1-point.y)*1000; if(index) ctx.lineTo(x,y); else ctx.moveTo(x,y);});
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
       drawToggles2d();
       drawLoads2d();
       ctx.strokeStyle = 'rgba(190,210,230,.18)'; ctx.lineWidth = 2;
@@ -776,6 +807,13 @@
         ctx.lineWidth = 3; ctx.strokeStyle = '#1b2c3c'; ctx.stroke();
         ctx.fillStyle = '#fff'; ctx.font = 'bold 19px system-ui'; ctx.fillText(String(i + 1), p.x + 17, p.y - 12);
       });
+      if (lineStart && !sceneTransition) {
+        const start=toCanvas(lineStart);
+        ctx.save(); ctx.strokeStyle='#fff'; ctx.fillStyle='#fff'; ctx.lineWidth=4;
+        ctx.beginPath(); ctx.arc(start.x,start.y,8,0,Math.PI*2); ctx.fill();
+        if (linePreview) {const end=toCanvas(linePreview); ctx.setLineDash([12,8]); ctx.beginPath(); ctx.moveTo(start.x,start.y); ctx.lineTo(end.x,end.y); ctx.stroke();}
+        ctx.restore();
+      }
       if (activeView === '3d') draw3d();
       saveCurrentScene();
     }
@@ -802,6 +840,7 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
     function selectView(view) {
+      if (view==='3d' && tool!=='select') selectTool('select');
       document.getElementById('loaderMenu').hidden = true;
       activeView = view;
       canvas.hidden = view !== '2d'; canvas3d.hidden = view !== '3d';
@@ -817,6 +856,8 @@
       document.getElementById('viewHint').textContent = placingRobot
         ? 'Click the field to place a new robot. Up to two robots per alliance and four total. Click the robot button again to cancel.'
         : editingLoader ? 'Click a corner match loader to edit its options. Click EDIT LOAD again to cancel.'
+        : tool==='draw' ? 'Drag on the field to draw an annotation. Use Undo drawing or Clear drawings to remove marks.'
+        : tool==='line' ? (lineStart ? 'Click the second point to complete the straight path. Press Escape to cancel.' : 'Click the first point, then the second. The active robot connects to the first point with a straight segment.')
         : activeView === '3d'
         ? "Drag to orbit the 3D field; scroll to zoom. Switch to the 2D editor to add or move waypoints. The green arrow marks the robot's front."
         : "Click to add waypoints; drag to move them. Select a waypoint and press Delete to remove it. X increases right; Y increases up.";
@@ -826,6 +867,22 @@
     const headingDialog = document.getElementById('headingDialog');
     const headingInput = document.getElementById('headingInput');
     const headingDial = document.getElementById('headingDial');
+    function selectTool(next) {
+      drawing=null; lineStart=null; linePreview=null; dragging=false; tool=next;
+      setPlacing(false); setEditingLoader(false); loaderMenu.hidden=true;
+      for (const [name,id] of [['select','toolSelect'],['draw','toolDraw'],['line','toolLine']]) {
+        const button=document.getElementById(id);
+        button.classList.toggle('primary',name===tool);
+        button.setAttribute('aria-pressed',String(name===tool));
+      }
+      if (next!=='select' && activeView!=='2d') selectView('2d');
+      updateViewHint(); draw();
+    }
+    document.getElementById('toolSelect').addEventListener('click',()=>selectTool('select'));
+    document.getElementById('toolDraw').addEventListener('click',()=>selectTool('draw'));
+    document.getElementById('toolLine').addEventListener('click',()=>selectTool('line'));
+    document.getElementById('undoDrawing').addEventListener('click',()=>{drawings.pop(); draw();});
+    document.getElementById('clearDrawings').addEventListener('click',()=>{drawings=[]; draw();});
     const loaderMenu = document.getElementById('loaderMenu');
     const contentsInput = document.getElementById('loadContents');
     const cupFaceInput = document.getElementById('cupFace');
@@ -840,6 +897,7 @@
       updateViewHint();
     }
     document.getElementById('editLoader').addEventListener('click', () => {
+      if (tool!=='select') selectTool('select');
       if (!editingLoader) setPlacing(false);
       setEditingLoader(!editingLoader); loaderMenu.hidden = true;
     });
@@ -969,6 +1027,7 @@
     }
     placeButton.addEventListener('click', () => {
       if (!placingRobot && !checkRobotCapacity()) return;
+      if (tool!=='select') selectTool('select');
       showTopError(); setEditingLoader(false); loaderMenu.hidden = true; setPlacing(!placingRobot); setMessage();
     });
     function updateHeadingDial() {
@@ -1063,6 +1122,22 @@
     canvas.addEventListener('pointerdown', event => {
       if (event.button !== 0) return;
       const p = pointerPosition(event);
+      if (tool==='draw') {
+        const point=toField(p.x,p.y);
+        drawing=[{x:point.x/settings.size,y:point.y/settings.size}];
+        drawings.push(drawing); canvas.setPointerCapture(event.pointerId); setMessage(); draw(); return;
+      }
+      if (tool==='line') {
+        if (!activeRobotId) {setMessage('Place a robot before creating a path.'); return;}
+        const point=toField(p.x,p.y);
+        if (!lineStart) {lineStart=point; linePreview=point; setMessage(); updateViewHint(); draw(); return;}
+        if (Math.hypot(point.x-lineStart.x,point.y-lineStart.y)<0.001) {setMessage('Choose two different points for the straight path.'); return;}
+        const last=points[points.length-1];
+        if (Math.hypot(last.x-lineStart.x,last.y-lineStart.y)>0.001) points.push({...lineStart,straight:true});
+        points.push({...point,straight:true});
+        lineStart=null; linePreview=null; selected=points.length-1; stop(); progress=0;
+        setMessage(); updateViewHint(); rebuild(); return;
+      }
       if (placingRobot) { selectRobotPosition(toField(p.x, p.y)); return; }
       if (handleLoader(event)) return;
       if (editingLoader) { setMessage('Select one of the four corner loaders.'); return; }
@@ -1080,15 +1155,23 @@
       setMessage(); rebuild();
     });
     canvas.addEventListener('pointermove', event => {
+      if (tool==='draw' && drawing) {
+        const p=pointerPosition(event), point=toField(p.x,p.y), next={x:point.x/settings.size,y:point.y/settings.size};
+        const last=drawing[drawing.length-1];
+        if (Math.hypot(next.x-last.x,next.y-last.y)>0.001) {drawing.push(next); draw();}
+        return;
+      }
+      if (tool==='line' && lineStart) {const p=pointerPosition(event); linePreview=toField(p.x,p.y); draw(); return;}
       if (!dragging || selected < 0) return;
       const p = pointerPosition(event);
-      points[selected] = toField(p.x, p.y); rebuild();
+      points[selected] = {...points[selected], ...toField(p.x, p.y)}; rebuild();
     });
-    function endDrag() { dragging = false; }
+    function endDrag() { dragging = false; drawing=null; }
     canvas.addEventListener('pointerup', endDrag);
     canvas.addEventListener('pointercancel', endDrag);
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && !loaderMenu.hidden) { loaderMenu.hidden = true; return; }
+      if (event.key === 'Escape' && lineStart) {lineStart=null; linePreview=null; updateViewHint(); draw(); return;}
       if ((event.key === 'Delete' || event.key === 'Backspace') && selected >= 0 && loaderMenu.hidden && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
         if (points.length<=1) {event.preventDefault(); setMessage('Use Remove active robot to remove its starting point.'); return;}
         event.preventDefault(); if (selected === 0) startHeading = null;
@@ -1134,7 +1217,7 @@
     });
     document.getElementById('export').addEventListener('click', () => {
       if (samples.length < 2 || total < 0.001) { setMessage('Add at least two distinct waypoints before exporting.'); return; }
-      const rows = samples.map((p, i) => `${p.x.toFixed(3)},${p.y.toFixed(3)},${(i === 0 && startHeading !== null ? startHeading : angleAt(i) * 180 / Math.PI).toFixed(2)},${p.distance.toFixed(3)}`);
+      const rows = samples.map((p, i) => `${p.x.toFixed(3)},${p.y.toFixed(3)},${(i === 0 && startHeading !== null ? startHeading : (p.heading ?? angleAt(i)) * 180 / Math.PI).toFixed(2)},${p.distance.toFixed(3)}`);
       download('v5-path.csv', 'x_in,y_in,heading_deg,distance_in\n' + rows.join('\n') + '\n', 'text/csv');
       setMessage();
     });
@@ -1144,22 +1227,23 @@
           const value = project.settings[key];
           if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) throw new Error(`Invalid ${key} setting.`);
         }
-        if (!project.waypoints.every(p => p && typeof p.x === 'number' && typeof p.y === 'number' && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.y >= 0 && p.x <= project.settings.size && p.y <= project.settings.size)) throw new Error('Invalid waypoint coordinates.');
+        if (!project.waypoints.every(p => p && typeof p.x === 'number' && typeof p.y === 'number' && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.y >= 0 && p.x <= project.settings.size && p.y <= project.settings.size && (p.straight === undefined || typeof p.straight === 'boolean'))) throw new Error('Invalid waypoint coordinates.');
         if (project.startHeading != null && (typeof project.startHeading !== 'number' || !Number.isFinite(project.startHeading) || project.startHeading < 0 || project.startHeading >= 360 || !project.waypoints.length)) throw new Error('Invalid starting heading.');
         if (project.alliance !== undefined && project.alliance !== 'red' && project.alliance !== 'blue') throw new Error('Invalid alliance color.');
         if (project.toggleStates !== undefined && (!Array.isArray(project.toggleStates) || project.toggleStates.length!==4 || !project.toggleStates.every(state=>Number.isInteger(state)&&state>=0&&state<3))) throw new Error('Invalid wall toggles.');
         if (project.fieldImage != null && (typeof project.fieldImage!=='string' || !/^data:image\/(?:png|jpeg|webp|gif|bmp|avif);base64,/.test(project.fieldImage))) throw new Error('Unsupported field image in project.');
+        if (project.drawings !== undefined && (!Array.isArray(project.drawings) || !project.drawings.every(stroke=>Array.isArray(stroke) && stroke.length>0 && stroke.every(p=>p && typeof p.x==='number' && typeof p.y==='number' && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.x<=1 && p.y>=0 && p.y<=1)))) throw new Error('Invalid drawings.');
         if (project.loaderDefaults !== undefined && (!Array.isArray(project.loaderDefaults) || project.loaderDefaults.length !== 4 || !project.loaderDefaults.every(config => config === null || validLoadConfig(config)))) throw new Error('Invalid match loader defaults.');
         if (project.matchLoads !== undefined && (!Array.isArray(project.matchLoads) || !project.matchLoads.every(load => load && Number.isInteger(load.loader) && load.loader >= 0 && load.loader < 4 && validLoadConfig(load.config) && (load.attached === undefined || typeof load.attached === 'boolean')) || loaders.some((_,i) => project.matchLoads.filter(load => load.loader === i).length > maxLoadsPerLoader))) throw new Error('Invalid match loads.');
         if (project.fieldAttachments !== undefined && (!Array.isArray(project.fieldAttachments) || !project.fieldAttachments.every(id=>fieldItems.some(item=>item.id===id)) || new Set(project.fieldAttachments).size!==project.fieldAttachments.length)) throw new Error('Invalid attached field pieces.');
-        const validPoints = path => Array.isArray(path) && path.length>0 && path.every(p=>p && typeof p.x==='number' && typeof p.y==='number' && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.y>=0 && p.x<=project.settings.size && p.y<=project.settings.size);
+        const validPoints = path => Array.isArray(path) && path.length>0 && path.every(p=>p && typeof p.x==='number' && typeof p.y==='number' && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.y>=0 && p.x<=project.settings.size && p.y<=project.settings.size && (p.straight===undefined || typeof p.straight==='boolean'));
         const validHeading = heading => heading===null || (typeof heading==='number' && Number.isFinite(heading) && heading>=0 && heading<360);
         let nextRobots;
         if (project.robots !== undefined) {
           if (!Array.isArray(project.robots) || project.robots.length>4 || !project.robots.every(robot=>robot && /^robot-[1-4]$/.test(robot.id) && typeof robot.id==='string' && ['red','blue'].includes(robot.alliance) && validPoints(robot.points) && validHeading(robot.startHeading) && typeof robot.progress==='number' && Number.isFinite(robot.progress) && robot.progress>=0 && robot.progress<=samplePath(robot.points).total+1e-6) || new Set(project.robots.map(robot=>robot.id)).size!==project.robots.length || ['red','blue'].some(color=>project.robots.filter(robot=>robot.alliance===color).length>2)) throw new Error('Invalid robots: maximum 4 total and 2 per alliance.');
-          nextRobots=project.robots.map(robot=>({id:robot.id,alliance:robot.alliance,points:robot.points.map(({x,y})=>({x,y})),startHeading:robot.startHeading,progress:robot.progress}));
+          nextRobots=project.robots.map(robot=>({id:robot.id,alliance:robot.alliance,points:robot.points.map(({x,y,straight})=>({x,y,...(straight !== undefined ? {straight} : {})})),startHeading:robot.startHeading,progress:robot.progress}));
         } else {
-          nextRobots=project.waypoints.length ? [{id:'robot-1',alliance:project.alliance || 'red',points:project.waypoints.map(({x,y})=>({x,y})),startHeading:project.startHeading ?? null,progress:0}] : [];
+          nextRobots=project.waypoints.length ? [{id:'robot-1',alliance:project.alliance || 'red',points:project.waypoints.map(({x,y,straight})=>({x,y,...(straight !== undefined ? {straight} : {})})),startHeading:project.startHeading ?? null,progress:0}] : [];
         }
         if (project.activeRobotId !== undefined && project.activeRobotId !== null && !nextRobots.some(robot=>robot.id===project.activeRobotId)) throw new Error('Invalid active robot.');
         const nextActive=project.activeRobotId ?? nextRobots[0]?.id ?? null;
@@ -1185,7 +1269,8 @@
           startHeading:nextRobots.find(robot=>robot.id===nextActive)?.startHeading ?? null,
           loaderDefaults:project.loaderDefaults ? project.loaderDefaults.map(config=>config && {...config}) : [null,null,null,null],
           matchLoads:nextLoads,fieldAttachments:[...nextAttachments],fieldOwners:nextOwners,
-          toggleStates:project.toggleStates ? [...project.toggleStates] : [0,0,0,0],fieldImage:project.fieldImage || null
+          toggleStates:project.toggleStates ? [...project.toggleStates] : [0,0,0,0],fieldImage:project.fieldImage || null,
+          drawings:project.drawings ? project.drawings.map(stroke=>stroke.map(({x,y})=>({x,y}))) : []
         };
     }
     function applySnapshot(snapshot) {
@@ -1194,6 +1279,7 @@
         alliance=project.alliance; updateAlliance();
         loaderDefaults=project.loaderDefaults; matchLoads=project.matchLoads;
         fieldAttachments=new Set(project.fieldAttachments); fieldOwners=project.fieldOwners;
+        drawings=project.drawings; drawing=null; lineStart=null; linePreview=null;
         toggleStates=project.toggleStates;
         loadSceneImage(project.fieldImage);
         loaderMenu.hidden = true; setEditingLoader(false);
@@ -1224,7 +1310,7 @@
       syncRobot();
       return structuredClone({
         version:1,units:'inches',settings,waypoints:points,startHeading,alliance,robots,activeRobotId,
-        loaderDefaults,matchLoads,fieldAttachments:[...fieldAttachments],fieldOwners,toggleStates,fieldImage:fieldImageData
+        loaderDefaults,matchLoads,fieldAttachments:[...fieldAttachments],fieldOwners,toggleStates,fieldImage:fieldImageData,drawings
       });
     }
     function saveCurrentScene() {

@@ -14,6 +14,13 @@ available at https://hivier.github.io/v5-path-planner/.
 - Use the robot button to place a robot and choose its starting heading.
   Up to two robots per alliance and four total are supported.
 - Select the active robot to edit, preview, or export its path.
+- In the 2D editor, choose **Draw** and drag to add a freehand annotation;
+  use **Undo drawing** or **Clear drawings** to remove annotations. Annotations
+  appear in both views and are saved per scene, but are not robot paths.
+- Choose **Straight path**, then click two different points to append a straight
+  segment to the active robot's path. If the first point differs from the path's
+  end, a straight connector is added. Press Escape to cancel the first point.
+  Choose **Select / waypoints** to resume normal field interactions.
 - Click cups, pins, or cup-and-pin assemblies to attach them to the nearest robot.
 - Click corner match loaders to configure or add loads; right-click to edit defaults.
 - Click wall toggles to cycle their colors.
