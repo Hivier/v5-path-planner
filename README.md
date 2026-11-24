@@ -33,8 +33,24 @@ available at https://hivier.github.io/v5-path-planner/.
   It stays there when the robot moves, can be picked up again, and its dropped
   position is saved in scenes and project files. Return buttons instead send
   carried objects back to their original positions.
-- The field includes four black scoring areas plus the central 0, and four
+- The field includes four black scoring areas plus the central area, and four
   red/blue scoring areas. Their shapes and positions are approximations.
+  Labels now show live **pin counts**, not fixed values or match points.
+  A pin counts when its center is inside an area's displayed base and it is not
+  carried or covered. The same area boundaries are used in both views.
+- Pins have an intrinsic state: `open` (no cup), `cleared` (inside a cup's clear
+  side), or `covered` (inside its opaque side). Choose the pin's compartment
+  separately from which cup side faces up in the match-loader menu.
+  Older cup-and-pin loads default to `cleared`.
+- Dropping into a scoring area centers the object on the stack. Objects stack
+  in drop order; removing an object settles those above it. A cup with its
+  opaque side down makes all pins below it `covered`; a clear-side-down cup
+  makes an open pin below it `cleared`. It does not uncover pins already
+  hidden by an opaque side. Intrinsically covered pins never count.
+  A loose pin dropped onto a cup takes the state of that cup's upward-facing
+  compartment: `cleared` for clear or `covered` for opaque.
+  Cup orientation, pin compartments, and stack order persist with scenes and
+  project files; counts are recalculated from those objects.
 - Click corner match loaders to configure or add loads; right-click to edit defaults.
 - Click wall toggles to cycle their colors.
 - Use scenes 1 through 10 to save different field states. A new scene copies the
