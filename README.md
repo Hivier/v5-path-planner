@@ -27,8 +27,12 @@ available at https://hivier.github.io/v5-path-planner/.
   end, a straight connector is added. Press Escape to cancel the first point.
   Choose **Select** to resume normal field interactions.
 - Click cups, pins, or cup-and-pin assemblies to attach them to the nearest robot.
-  Each robot can carry one object; a cup with a pin counts as one. Return the
+  Each robot can carry one object; a cup with a pin counts as one. Drop or return the
   active robot's object before picking up another.
+- Click a carried object to drop it on the ground directly under its robot.
+  It stays there when the robot moves, can be picked up again, and its dropped
+  position is saved in scenes and project files. Return buttons instead send
+  carried objects back to their original positions.
 - The field includes four black scoring areas plus the central 0, and four
   red/blue scoring areas. Their shapes and positions are approximations.
 - Click corner match loaders to configure or add loads; right-click to edit defaults.

@@ -193,7 +193,7 @@
         </div>
         <div><label for="image">Optional 2D field image</label><input id="image" type="file" accept="image/*"></div>
         <div class="muted">Use the red/blue tool to choose the robot's alliance color. Click a corner tube to add a match load; right-click it or use Match load to change its options.</div>
-        <div class="muted">Place up to four robots, two per alliance. Click a cup, pin, or cup-and-pin assembly to attach it to the nearest robot. Each robot carries one object at a time; a cup with a pin counts as one. Return a robot's object before picking up another.</div>
+        <div class="muted">Place up to four robots, two per alliance. Click a cup, pin, or cup-and-pin assembly to attach it to the nearest robot. Each robot carries one object at a time; a cup with a pin counts as one. Click a carried object to drop it under the robot, or use Return to send it back to its original position.</div>
         <div class="muted">Draw creates field annotations. Straight path uses two clicks; the active robot's path connects to the first point and then travels straight to the second. Use Select / waypoints to interact with field objects.</div>
         <div class="muted">Click a wall toggle once to flip it: blue-side toggles cycle yellow → red → blue; red-side toggles cycle yellow → blue → red.</div>
         <div class="notice">Scoring areas and field elements are approximations based on the supplied images, not official dimensions. A custom 2D image does not change the 3D model.</div>
@@ -233,6 +233,7 @@
     const fieldItems = [];
     let fieldAttachments = new Set();
     let fieldOwners = {};
+    let droppedPieces = {};
     let robots = [], activeRobotId = null;
     const toggles = [
       {x:72,y:0,angle:0,side:'red'}, {x:72,y:144,angle:0,side:'blue'},
@@ -471,7 +472,7 @@
     function itemPosition(item, index) {
       const robot=robots.find(robot=>robot.id===item.robotId);
       const pose = robot ? robotPose(robot) : null;
-      if (!item.attached || !pose) return {x:item.x, y:item.y, z:item.z, angle:0};
+      if (!item.attached || !pose) return droppedPieces[item.id] || {x:item.x, y:item.y, z:item.z, angle:0};
       const factor = 144/settings.size, c=Math.cos(pose.angle), s=Math.sin(pose.angle);
       const forward = settings.length*factor/2 + 5 + Math.floor(index/3)*9;
       const sideways = (index%3-1)*9;
@@ -674,7 +675,7 @@
       return {x:500+horizontal*scale,y:545+(depth*sp-z*cp)*scale,depth:depth*cp+z*sp};
     }
     function positionedFaces(item,p) {
-      if (!item.attached && !sceneTransition) return item.faces;
+      if (!item.attached && !droppedPieces[item.id] && !sceneTransition) return item.faces;
       const c=Math.cos(p.angle), s=Math.sin(p.angle);
       return item.faces.map(face=>({color:face.color,opacity:p.opacity ?? 1,vertices:face.vertices.map(([x,y,z])=>{
         x-=item.x; y-=item.y;
@@ -709,40 +710,50 @@
       }
       return inside;
     }
-    function attachClickedPiece(event) {
+    function attachClickedPiece(event, heldOnly = false) {
+      if (sceneTransition) return false;
       const target=event.currentTarget, rect=target.getBoundingClientRect();
       const x=(event.clientX-rect.left)/rect.width*1000, y=(event.clientY-rect.top)/rect.height*1000;
-      let chosen=null, best=-Infinity;
-      for (const item of pickupItems()) {
-        if (item.attached) continue;
+      let chosen=null, chosenPosition=null, best=-Infinity;
+      eachRawPositionedItem((item,p) => {
+        if (heldOnly && !item.attached) return;
         if (target===canvas) {
-          const distance=Math.hypot(x-item.x/144*1000,y-(1-item.y/144)*1000);
+          const distance=Math.hypot(x-p.x/144*1000,y-(1-p.y/144)*1000);
           const radius=item.config.contents==='pin'?15:24;
-          if (distance<=radius && -distance>best) {chosen=item; best=-distance;}
+          if (distance<=radius && -distance>best) {chosen=item; chosenPosition=p; best=-distance;}
         } else {
-          for (const face of item.faces) {
+          for (const face of positionedFaces(item,p)) {
             const vertices=face.vertices.map(project3d);
             if (!insidePolygon(x,y,vertices)) continue;
             const depth=vertices.reduce((sum,p)=>sum+p.depth,0)/vertices.length;
-            if (depth>best) {chosen=item; best=depth;}
+            if (depth>best) {chosen=item; chosenPosition=p; best=depth;}
           }
         }
-      }
+      });
       if (!chosen) return false;
+      if (chosen.attached) {
+        const robot=robots.find(robot=>robot.id===chosen.robotId), pose=robotPose(robot);
+        droppedPieces[chosen.id]={x:pose.x/settings.size*144,y:pose.y/settings.size*144,z:0,angle:pose.angle};
+        if (chosen.load) {delete chosen.load.attached; delete chosen.load.robotId;}
+        else {fieldAttachments.delete(chosen.id); delete fieldOwners[chosen.id];}
+        setMessage('Object dropped under the robot. Move the robot away to pick it up again.');
+        draw(); return true;
+      }
       let nearest=null, closest=Infinity;
       for (const robot of robots) {
         const pose=robotPose(robot);
         if (!pose) continue;
-        const distance=Math.hypot(chosen.x-pose.x/settings.size*144,chosen.y-pose.y/settings.size*144);
+        const distance=Math.hypot(chosenPosition.x-pose.x/settings.size*144,chosenPosition.y-pose.y/settings.size*144);
         if (distance<closest) {closest=distance; nearest=robot;}
       }
       if (!nearest) {setMessage('Place a robot before attaching pieces.'); return true;}
       if (Object.values(fieldOwners).includes(nearest.id) || matchLoads.some(load=>load.attached && load.robotId===nearest.id)) {
-        setMessage(`The nearest robot (${nearest.alliance} ${nearest.id}) is already carrying an object. Return it before picking up another.`);
+        setMessage(`The nearest robot (${nearest.alliance} ${nearest.id}) is already carrying an object. Drop or return it before picking up another.`);
         return true;
       }
       if (chosen.load) {chosen.load.attached=true; chosen.load.robotId=nearest.id;}
       else {fieldAttachments.add(chosen.id); fieldOwners[chosen.id]=nearest.id;}
+      delete droppedPieces[chosen.id];
       setMessage(`Piece attached to ${nearest.alliance} ${nearest.id}.`); draw();
       return true;
     }
@@ -1070,6 +1081,7 @@
       loaderMenu.hidden = true; setMessage('Match loader default saved.');
     });
     document.getElementById('clearLoads').addEventListener('click', () => {
+      for (const load of matchLoads) if (load.loader===activeLoader) delete droppedPieces[load.id];
       matchLoads = matchLoads.filter(load => load.loader !== activeLoader);
       setMessage(); draw();
     });
@@ -1273,6 +1285,7 @@
         if (!point) { setMessage('Choose a position on the field.'); return; }
         setMessage(); startPlacementAim(point,event); return;
       }
+      if (attachClickedPiece(event,true)) return;
       if (handleLoader(event)) return;
       if (editingLoader) { setMessage('Select one of the four corner loaders.'); return; }
       if (flipClickedToggle(event)) return;
@@ -1316,6 +1329,7 @@
         setMessage(); updateViewHint(); rebuild(); return;
       }
       if (placingRobot) { startPlacementAim(toField(p.x, p.y),event); return; }
+      if (attachClickedPiece(event,true)) return;
       if (handleLoader(event)) return;
       if (editingLoader) { setMessage('Select one of the four corner loaders.'); return; }
       if (flipClickedToggle(event)) return;
@@ -1446,6 +1460,13 @@
           return {id:load.id || crypto.randomUUID(),loader:load.loader,config:{...load.config},attached:load.attached===true,...(load.attached ? {robotId:owner} : {})};
         });
         if (new Set(nextLoads.map(load=>load.id)).size!==nextLoads.length) throw new Error('Duplicate match load IDs.');
+        const nextDropped=project.droppedPieces ?? {};
+        if (typeof nextDropped!=='object' || Array.isArray(nextDropped) || Object.entries(nextDropped).some(([id,p])=>
+          !(fieldItems.some(item=>item.id===id && !item.scoringArea) || nextLoads.some(load=>load.id===id)) ||
+          nextAttachments.has(id) || nextLoads.some(load=>load.id===id && load.attached) ||
+          !p || !['x','y','z','angle'].every(key=>typeof p[key]==='number' && Number.isFinite(p[key])) ||
+          p.x<0 || p.x>144 || p.y<0 || p.y>144 || p.z!==0
+        )) throw new Error('Invalid dropped object positions.');
         const occupied=new Set();
         let returned=0, markersRestored=0;
         for (const id of nextAttachments) {
@@ -1467,7 +1488,7 @@
           waypoints:nextRobots.find(robot=>robot.id===nextActive)?.points || [],
           startHeading:nextRobots.find(robot=>robot.id===nextActive)?.startHeading ?? null,
           loaderDefaults:project.loaderDefaults ? project.loaderDefaults.map(config=>config && {...config}) : [null,null,null,null],
-          matchLoads:nextLoads,fieldAttachments:[...nextAttachments],fieldOwners:nextOwners,
+          matchLoads:nextLoads,fieldAttachments:[...nextAttachments],fieldOwners:nextOwners,droppedPieces:structuredClone(nextDropped),
           toggleStates:project.toggleStates ? [...project.toggleStates] : [0,0,0,0],fieldImage:project.fieldImage || null,
           drawings:project.drawings ? project.drawings.map(stroke=>stroke.map(({x,y})=>({x,y}))) : []
         };
@@ -1479,6 +1500,7 @@
         alliance=project.alliance; updateAlliance();
         loaderDefaults=project.loaderDefaults; matchLoads=project.matchLoads;
         fieldAttachments=new Set(project.fieldAttachments); fieldOwners=project.fieldOwners;
+        droppedPieces=project.droppedPieces || {};
         drawings=project.drawings; drawing=null; lineStart=null; linePreview=null;
         toggleStates=project.toggleStates;
         loadSceneImage(project.fieldImage);
@@ -1510,7 +1532,7 @@
       syncRobot();
       return structuredClone({
         version:1,units:'inches',settings,waypoints:points,startHeading,alliance,robots,activeRobotId,
-        loaderDefaults,matchLoads,fieldAttachments:[...fieldAttachments],fieldOwners,toggleStates,fieldImage:fieldImageData,drawings
+        loaderDefaults,matchLoads,fieldAttachments:[...fieldAttachments],fieldOwners,droppedPieces,toggleStates,fieldImage:fieldImageData,drawings
       });
     }
     function saveCurrentScene() {
