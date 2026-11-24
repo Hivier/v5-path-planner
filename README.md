@@ -11,8 +11,9 @@ available at https://hivier.github.io/v5-path-planner/.
 ## Controls
 
 - Switch between the 2D path editor and the orbitable 3D field.
-- Use the robot button to place a robot and choose its starting heading.
+- Use the robot button, click a spot, then move the mouse around the heading dial and click to place (snaps to 45° and 90°; arrow keys turn 45°, Enter places, Escape cancels). You can also press, drag, and release.
   Up to two robots per alliance and four total are supported.
+- Hold right-click on a robot and move the mouse around it to change its starting heading. Release to finish; Escape reverts.
 - Select the active robot to edit, preview, or export its path.
 - In the 2D editor, choose **Draw** and drag to add a freehand annotation;
   use **Undo drawing** or **Clear drawings** to remove annotations. Annotations

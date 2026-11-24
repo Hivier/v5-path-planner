@@ -31,9 +31,6 @@
     .loader-menu select { width: 100%; background: #0d1521; color: #fff; border: 1px solid #43536b; border-radius: 6px; padding: 7px; margin-bottom: 10px; }
     .loader-menu label.checkbox { display: flex; align-items: center; gap: 6px; margin: 3px 0 10px; }
     #field3d.placing { cursor: crosshair; }
-    dialog { width: min(360px, calc(100vw - 32px)); background: #151e2c; color: #e7edf7; border: 1px solid #53667c; border-radius: 10px; padding: 20px; }
-    dialog::backdrop { background: rgba(0, 0, 0, .7); }
-    #headingDial { display: block; width: 220px; max-width: 100%; margin: 10px auto; touch-action: none; cursor: crosshair; }
     .hint { margin: 10px auto 0; max-width: 850px; line-height: 1.5; }
     aside { display: grid; align-content: start; gap: 14px; }
     .card { background: #151e2c; border: 1px solid #2c394b; border-radius: 10px; padding: 15px; }
@@ -164,27 +161,6 @@
       </section>
     </aside>
   </main>
-  <dialog id="headingDialog" aria-labelledby="headingTitle">
-    <h2 id="headingTitle">Choose the robot's front</h2>
-    <p class="muted">Click or drag around the circle. Near multiples of 45° the heading snaps. 0° points right and 90° points up in the 2D field.</p>
-    <svg id="headingDial" viewBox="0 0 240 240" role="img" aria-label="Heading direction dial; use the heading input for keyboard entry">
-      <circle cx="120" cy="120" r="95" fill="#0d1521" stroke="#71839a" stroke-width="2"/>
-      <g stroke="#53667c" stroke-width="2">
-        <path d="M120 25v12M120 203v12M25 120h12M203 120h12M53 53l9 9M178 178l9 9M187 53l-9 9M62 178l-9 9"/>
-      </g>
-      <text x="213" y="115" fill="#c6d6e8" font-size="12">0°</text>
-      <text x="110" y="19" fill="#c6d6e8" font-size="12">90°</text>
-      <text x="1" y="115" fill="#c6d6e8" font-size="12">180°</text>
-      <text x="104" y="235" fill="#c6d6e8" font-size="12">270°</text>
-      <line id="headingLine" x1="120" y1="120" x2="200" y2="120" stroke="#17b9a1" stroke-width="5" stroke-linecap="round"/>
-      <circle id="headingTip" cx="200" cy="120" r="8" fill="#17b9a1"/>
-      <circle cx="120" cy="120" r="5" fill="#e7edf7"/>
-    </svg>
-    <label for="headingInput">Heading in degrees (0–359.9)</label>
-    <input id="headingInput" type="number" min="0" max="359.9" step="0.1" value="0">
-    <p class="muted">This sets the starting pose; it does not change the path curve.</p>
-    <div class="buttons"><button id="confirmHeading" class="primary">Place robot</button><button id="cancelHeading">Cancel</button></div>
-  </dialog>
   <script>
     'use strict';
     const canvas = document.getElementById('field');
@@ -199,7 +175,7 @@
     let points = [], samples = [], total = 0, selected = -1, dragging = false;
     let progress = 0, playing = false, previousTime = null, fieldImage = null;
     let activeView = '3d', orbitAngle = -0.65, orbitPitch = 0.66, zoom = 1, orbitPointer = null;
-    let startHeading = null, placingRobot = false, pendingRobot = null, alliance = 'red';
+    let startHeading = null, placingRobot = false, aim = null, suppressContextMenu = false, alliance = 'red';
     const loaders = [[3,3], [3,141], [141,3], [141,141]];
     let loaderDefaults = [null, null, null, null], matchLoads = [], editingLoader = false;
     const fieldItems = [];
@@ -742,20 +718,8 @@
         dynamic.stripe(samples[i-1].x*factor, samples[i-1].y*factor, samples[i].x*factor, samples[i].y*factor, .9, '#ffcb68', .2);
       }
       if (!sceneTransition) points.forEach(p => dynamic.round(p.x*factor,p.y*factor,.25,1.3,1.3,.4,'#ffcb68'));
-      for (const robot of displayRobots()) {
-        const pose=robotPose(robot);
-        if (!pose) continue;
-        const faceStart=faces.length;
-        const x = pose.x*factor, y = pose.y*factor, l = settings.length*factor, w = settings.width*factor;
-        dynamic.box(x,y,1,l,w,4*factor,allianceColors[robot.alliance],pose.angle);
-        const c = Math.cos(pose.angle), s = Math.sin(pose.angle);
-        for (const dx of [-l*.28,l*.28]) for (const dy of [-w*.42,w*.42]) {
-          dynamic.box(x+dx*c-dy*s,y+dx*s+dy*c,.4,l*.26,w*.16,3*factor,'#293541',pose.angle);
-        }
-        const p = (a,b) => [x+a*c-b*s,y+a*s+b*c,5*factor+.1];
-        faces.push({ vertices: [p(l*.36,0),p(-l*.12,-w*.18),p(-l*.12,w*.18)], color: '#18b9a1' });
-        for (let i=faceStart;i<faces.length;i++) faces[i].opacity=robotOpacity(robot.id);
-      }
+      for (const robot of displayRobots()) addRobot3d(faces,dynamic,robotPose(robot),robot.alliance,robotOpacity(robot.id));
+      if (aim?.mode==='place') addRobot3d(faces,dynamic,{...aim.point,angle:aim.heading*Math.PI/180},aim.alliance,.75);
       const projected = faces.map(f => {
         const vertices = f.vertices.map(project3d);
         return { vertices, color: f.color, opacity:f.opacity ?? 1, depth: vertices.reduce((sum, p) => sum+p.depth, 0)/vertices.length };
@@ -775,6 +739,56 @@
         ctx3d.strokeText(String(score),p.x,p.y); ctx3d.fillText(String(score),p.x,p.y);
       }
       ctx3d.restore();
+      drawAimDial3d();
+    }
+    function addRobot3d(faces,dynamic,pose,robotAlliance,opacity) {
+      if (!pose) return;
+      const factor=144/settings.size, faceStart=faces.length;
+      const x = pose.x*factor, y = pose.y*factor, l = settings.length*factor, w = settings.width*factor;
+      dynamic.box(x,y,1,l,w,4*factor,allianceColors[robotAlliance],pose.angle);
+      const c = Math.cos(pose.angle), s = Math.sin(pose.angle);
+      for (const dx of [-l*.28,l*.28]) for (const dy of [-w*.42,w*.42]) {
+        dynamic.box(x+dx*c-dy*s,y+dx*s+dy*c,.4,l*.26,w*.16,3*factor,'#293541',pose.angle);
+      }
+      const p = (a,b) => [x+a*c-b*s,y+a*s+b*c,5*factor+.1];
+      faces.push({ vertices: [p(l*.36,0),p(-l*.12,-w*.18),p(-l*.12,w*.18)], color: '#18b9a1' });
+      for (let i=faceStart;i<faces.length;i++) faces[i].opacity=opacity;
+    }
+    function aimRadius() { return Math.hypot(settings.length,settings.width)/2+5; }
+    function drawAimDial(context,project,heading) {
+      const ring=[];
+      for (let i=0;i<=64;i++) ring.push(project(i/64*Math.PI*2,aimRadius()));
+      context.save();
+      context.beginPath(); ring.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));
+      context.fillStyle='rgba(23,185,161,.1)'; context.fill();
+      context.strokeStyle='rgba(231,237,247,.9)'; context.lineWidth=4; context.stroke();
+      for (let i=0;i<8;i++) {
+        const angle=i*Math.PI/4, active=heading===i*45;
+        const inner=project(angle,aimRadius()-(i%2?2:3.5)), outer=project(angle,aimRadius()+(i%2?2:3.5));
+        context.beginPath(); context.moveTo(inner.x,inner.y); context.lineTo(outer.x,outer.y);
+        context.strokeStyle=active?'#52e4d1':'#e7edf7'; context.lineWidth=active?7:i%2?3:5; context.stroke();
+      }
+      const angle=heading*Math.PI/180, center=project(0,0), knob=project(angle,aimRadius()), label=project(angle,aimRadius()+8);
+      context.setLineDash([10,8]); context.beginPath(); context.moveTo(center.x,center.y); context.lineTo(knob.x,knob.y);
+      context.strokeStyle='#52e4d1'; context.lineWidth=4; context.stroke(); context.setLineDash([]);
+      context.beginPath(); context.arc(knob.x,knob.y,13,0,Math.PI*2); context.fillStyle='#17b9a1'; context.fill();
+      context.strokeStyle='#fff'; context.lineWidth=3; context.stroke();
+      const text=`${Math.round(heading*10)/10}°`;
+      context.font='bold 24px system-ui'; context.textAlign='center'; context.textBaseline='middle';
+      context.lineWidth=6; context.strokeStyle='#0d1521'; context.strokeText(text,label.x,label.y);
+      context.fillStyle='#fff'; context.fillText(text,label.x,label.y);
+      context.restore();
+    }
+    function drawAimDial2d() {
+      if (!aim) return;
+      if (aim.mode==='place') drawRobot({...aim.point,angle:aim.heading*Math.PI/180},{id:'preview',alliance:aim.alliance});
+      const scale=1000/settings.size, c=toCanvas(aim.point);
+      drawAimDial(ctx,(angle,r)=>({x:c.x+Math.cos(angle)*r*scale,y:c.y-Math.sin(angle)*r*scale}),aim.heading);
+    }
+    function drawAimDial3d() {
+      if (!aim) return;
+      const factor=144/settings.size, x=aim.point.x*factor, y=aim.point.y*factor;
+      drawAimDial(ctx3d,(angle,r)=>project3d([x+Math.cos(angle)*r*factor,y+Math.sin(angle)*r*factor,.3]),aim.heading);
     }
     function fieldGeometryHelpers(faces) {
       function box(x,y,z,l,w,h,color,angle = 0) {
@@ -843,6 +857,7 @@
       }
       displayRobots().forEach(robot=>drawRobot(robotPose(robot),robot));
       eachPositionedItem((item,p)=>{if(item.attached) drawItem2d(item,p);});
+      drawAimDial2d();
       document.getElementById('attachedCount').textContent = fieldAttachments.size + matchLoads.filter(load=>load.attached).length;
       if (!sceneTransition) points.forEach((point, i) => {
         const p = toCanvas(point);
@@ -897,20 +912,20 @@
       draw();
     }
     function updateViewHint() {
-      document.getElementById('viewHint').textContent = placingRobot
+      document.getElementById('viewHint').textContent = aim?.mode==='place'
+        ? 'Move the mouse around the robot to aim its front (snaps to 45° and 90°). Click to place. Arrow keys turn 45°, Enter places, and Escape or right-click picks a new spot.'
+        : aim?.mode==='rotate' ? 'Keep holding right-click and move around the robot to set its starting heading. Release to finish; Escape reverts.'
+        : placingRobot
         ? 'Click the field to place a new robot. Up to two robots per alliance and four total. Click the robot button again to cancel.'
         : editingLoader ? 'Click a corner match loader to edit its options. Click EDIT LOAD again to cancel.'
         : tool==='draw' ? 'Drag on the field to draw an annotation. Use Undo drawing or Clear drawings to remove marks.'
         : tool==='line' ? (lineStart ? 'Click the second point to complete the straight path. Press Escape to cancel.' : 'Click the first point, then the second. The active robot connects to the first point with a straight segment.')
         : activeView === '3d'
-        ? "Drag to orbit the 3D field; scroll to zoom. Switch to the 2D editor to add or move waypoints. The green arrow marks the robot's front."
-        : "Click to add waypoints; drag to move them. Select a waypoint and press Delete to remove it. X increases right; Y increases up.";
+        ? "Drag to orbit the 3D field; scroll to zoom. Switch to the 2D editor to add or move waypoints. The green arrow marks the robot's front. Hold right-click on a robot and move the mouse to turn it."
+        : "Click to add waypoints; drag to move them. Select a waypoint and press Delete to remove it. Hold right-click on a robot and move the mouse to turn it.";
     }
     const placeButton = document.getElementById('placeRobot');
     const allianceButton = document.getElementById('alliance');
-    const headingDialog = document.getElementById('headingDialog');
-    const headingInput = document.getElementById('headingInput');
-    const headingDial = document.getElementById('headingDial');
     function selectTool(next) {
       drawing=null; lineStart=null; linePreview=null; dragging=false; tool=next;
       setPlacing(false); setEditingLoader(false); loaderMenu.hidden=true;
@@ -1042,6 +1057,7 @@
       return true;
     }
     for (const target of [canvas,canvas3d]) target.addEventListener('contextmenu', event => {
+      if (suppressContextMenu || aim || robotAt(event)) {event.preventDefault(); suppressContextMenu=false; return;}
       if (handleLoader(event, true)) event.preventDefault();
     });
     function updateAlliance() {
@@ -1059,6 +1075,7 @@
     });
     function setPlacing(value) {
       placingRobot = value;
+      if (!value && aim?.mode==='place') {aim=null; draw();}
       placeButton.setAttribute('aria-pressed', String(value));
       placeButton.classList.toggle('primary', value);
       canvas3d.classList.toggle('placing', value);
@@ -1074,73 +1091,135 @@
       if (tool!=='select') selectTool('select');
       showTopError(); setEditingLoader(false); loaderMenu.hidden = true; setPlacing(!placingRobot); setMessage();
     });
-    function updateHeadingDial() {
-      const degrees = Number(headingInput.value);
-      if (headingInput.value.trim() === '' || !Number.isFinite(degrees) || degrees < 0 || degrees >= 360) return;
-      const angle = degrees * Math.PI / 180;
-      const x = 120 + 80 * Math.cos(angle), y = 120 - 80 * Math.sin(angle);
-      document.getElementById('headingLine').setAttribute('x2', x);
-      document.getElementById('headingLine').setAttribute('y2', y);
-      document.getElementById('headingTip').setAttribute('cx', x);
-      document.getElementById('headingTip').setAttribute('cy', y);
+    function snapHeading(degrees) {
+      degrees=(degrees%360+360)%360;
+      const snapped=Math.round(degrees/45)*45;
+      return Math.abs(degrees-snapped)<=7 ? snapped%360 : Math.round(degrees*10)/10%360;
     }
-    function chooseHeading(event) {
-      const rect = headingDial.getBoundingClientRect();
-      const x = (event.clientX - rect.left) / rect.width * 240 - 120;
-      const y = 120 - (event.clientY - rect.top) / rect.height * 240;
-      if (Math.hypot(x, y) < 5) return;
-      let degrees = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-      const snapped = Math.round(degrees / 45) * 45;
-      if (Math.abs(degrees - snapped) <= 6) degrees = snapped % 360;
-      headingInput.value = String(Math.round(degrees * 10) / 10 % 360);
-      updateHeadingDial();
+    function eventFieldPoint(event) {
+      if (event.currentTarget===canvas3d) return screenToField3d(event,true);
+      const p=pointerPosition(event);
+      return {x:p.x/1000*settings.size,y:(1000-p.y)/1000*settings.size};
     }
-    headingDial.addEventListener('pointerdown', event => { headingDial.setPointerCapture(event.pointerId); chooseHeading(event); });
-    headingDial.addEventListener('pointermove', event => { if (headingDial.hasPointerCapture(event.pointerId)) chooseHeading(event); });
-    headingInput.addEventListener('input', updateHeadingDial);
-    function selectRobotPosition(point) {
+    function placementAlliance() {
+      return robots.filter(robot=>robot.alliance===alliance).length>=2 ? (alliance==='red'?'blue':'red') : alliance;
+    }
+    function setAimHeading(heading) {
+      aim.heading=heading;
+      if (aim.mode==='rotate') {
+        const robot=robots.find(robot=>robot.id===aim.robotId);
+        if (robot.id===activeRobotId) {startHeading=heading; progress=0; syncRobot();}
+        else Object.assign(robot,{startHeading:heading,progress:0});
+      }
+      draw();
+    }
+    function aimAt(event) {
+      if (!aim) return;
+      const p=eventFieldPoint(event);
+      if (!p) return;
+      const dx=p.x-aim.point.x, dy=p.y-aim.point.y, distance=Math.hypot(dx,dy);
+      if (distance<Math.max(1,settings.size*.008)) return;
+      if (aim.pressing && distance>Math.max(settings.length,settings.width)*.35) aim.moved=true;
+      setAimHeading(snapHeading(Math.atan2(dy,dx)*180/Math.PI));
+    }
+    function startPlacementAim(point,event) {
       if (!checkRobotCapacity()) return;
-      pendingRobot = point;
-      headingInput.value = '0';
-      updateHeadingDial();
-      headingDialog.showModal();
-      headingInput.focus();
+      aim={mode:'place',point,heading:0,alliance:placementAlliance(),pressing:true,moved:false,pointerId:event.pointerId};
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setMessage(); updateViewHint(); draw();
     }
-    document.getElementById('confirmHeading').addEventListener('click', () => {
-      if (!headingInput.reportValidity() || headingInput.value.trim() === '') return;
-      const heading = Number(headingInput.value);
-      if (!Number.isFinite(heading) || heading < 0 || heading >= 360) return;
-      if (!checkRobotCapacity()) {headingDialog.close(); return;}
+    function confirmPlacement() {
+      if (aim?.mode!=='place') return;
+      const {point,heading}=aim;
+      aim=null;
+      if (!checkRobotCapacity()) {updateViewHint(); draw(); return;}
       syncRobot();
       const switched=robots.filter(robot=>robot.alliance===alliance).length>=2;
       if (switched) {alliance=alliance==='red'?'blue':'red'; updateAlliance();}
       const id=[1,2,3,4].map(number=>`robot-${number}`).find(id=>!robots.some(robot=>robot.id===id));
-      const robot={id,alliance,points:[{...pendingRobot}],startHeading:heading,progress:0};
-      robots.push(robot);
+      robots.push({id,alliance,points:[{...point}],startHeading:heading,progress:0});
       activateRobot(id);
       selected=0; setPlacing(false); showTopError();
-      setMessage(switched ? `Selected alliance was full. Placed a ${alliance} robot.` : '');
-      headingDialog.close();
-    });
-    document.getElementById('cancelHeading').addEventListener('click', () => headingDialog.close());
-    headingDialog.addEventListener('close', () => { pendingRobot = null; });
-    function screenToField3d(event) {
+      setMessage(switched ? `Selected alliance was full. Placed a ${alliance} robot facing ${heading}°.` : `Placed robot facing ${heading}°.`);
+    }
+    function cancelAim() {
+      if (!aim) return;
+      if (aim.mode==='rotate') {setAimHeading(aim.original); setMessage('Heading change cancelled.');}
+      else setMessage('Choose another spot for the robot.');
+      aim=null; updateViewHint(); draw();
+    }
+    function robotAt(event) {
+      if (sceneTransition) return null;
+      const p=eventFieldPoint(event);
+      if (!p) return null;
+      for (const robot of robots.slice().reverse()) {
+        const pose=robotPose(robot);
+        if (!pose) continue;
+        const dx=p.x-pose.x, dy=p.y-pose.y, c=Math.cos(pose.angle), s=Math.sin(pose.angle);
+        if (Math.abs(dx*c+dy*s)<=settings.length/2+2 && Math.abs(-dx*s+dy*c)<=settings.width/2+2) return robot;
+      }
+      return null;
+    }
+    function startRotateAim(event) {
+      const robot=robotAt(event);
+      if (!robot) return false;
+      stop(); syncRobot();
+      const start=poseAt(0,samplePath(robot.points).samples,robot.startHeading);
+      const original=robot.startHeading ?? snapHeading(start.angle*180/Math.PI);
+      aim={mode:'rotate',robotId:robot.id,point:{...robot.points[0]},heading:original,original,pointerId:event.pointerId};
+      event.currentTarget.setPointerCapture(event.pointerId);
+      suppressContextMenu=true; setMessage(); updateViewHint(); setAimHeading(original);
+      return true;
+    }
+    function finishRotateAim() {
+      const heading=aim.heading;
+      aim=null; updateViewHint(); draw();
+      setMessage(`Starting heading set to ${heading}°.`);
+      setTimeout(()=>{suppressContextMenu=false;},700);
+    }
+    function handleAimPointerDown(event) {
+      const rightClick=event.button===2 || (event.button===0 && event.ctrlKey);
+      if (aim?.mode==='rotate') return true;
+      if (aim?.mode==='place') {
+        event.preventDefault();
+        if (rightClick) {suppressContextMenu=true; cancelAim();}
+        else if (event.button===0) {aim.pressing=false; aimAt(event); confirmPlacement();}
+        return true;
+      }
+      if (rightClick && !placingRobot && startRotateAim(event)) {event.preventDefault(); return true;}
+      return false;
+    }
+    function handleAimPointerMove(event) {
+      if (!aim) return false;
+      if (aim.mode==='place' || event.pointerId===aim.pointerId) aimAt(event);
+      return true;
+    }
+    function handleAimPointerUp(event) {
+      if (!aim || event.pointerId!==aim.pointerId) return false;
+      if (aim.mode==='rotate') {finishRotateAim(); return true;}
+      const confirm=aim.pressing && aim.moved;
+      aim.pressing=false;
+      if (confirm) confirmPlacement();
+      return true;
+    }
+    function screenToField3d(event, allowOutside = false) {
       const rect = canvas3d.getBoundingClientRect(), scale = 4.1 * zoom;
       const horizontal = ((event.clientX - rect.left) / rect.width * 1000 - 500) / scale;
       const depth = ((event.clientY - rect.top) / rect.height * 1000 - 545) / (scale * Math.sin(orbitPitch));
       const x = 72 + Math.cos(orbitAngle) * horizontal + Math.sin(orbitAngle) * depth;
       const y = 72 - Math.sin(orbitAngle) * horizontal + Math.cos(orbitAngle) * depth;
-      if (x < 0 || x > 144 || y < 0 || y > 144) return null;
+      if (!allowOutside && (x < 0 || x > 144 || y < 0 || y > 144)) return null;
       return { x: x / 144 * settings.size, y: y / 144 * settings.size };
     }
     document.getElementById('view2d').addEventListener('click', () => selectView('2d'));
     document.getElementById('view3d').addEventListener('click', () => selectView('3d'));
     canvas3d.addEventListener('pointerdown', event => {
+      if (handleAimPointerDown(event)) return;
       if (event.button !== 0) return;
       if (placingRobot) {
         const point = screenToField3d(event);
         if (!point) { setMessage('Choose a position on the field.'); return; }
-        setMessage(); selectRobotPosition(point); return;
+        setMessage(); startPlacementAim(point,event); return;
       }
       if (handleLoader(event)) return;
       if (editingLoader) { setMessage('Select one of the four corner loaders.'); return; }
@@ -1150,20 +1229,22 @@
       canvas3d.setPointerCapture(event.pointerId);
     });
     canvas3d.addEventListener('pointermove', event => {
+      if (handleAimPointerMove(event)) return;
       if (!orbitPointer) return;
       orbitAngle += (event.clientX - orbitPointer.x) * .008;
       orbitPitch = clamp(orbitPitch + (event.clientY - orbitPointer.y) * .008, .2, 1.45);
       orbitPointer = { x: event.clientX, y: event.clientY };
       draw3d();
     });
-    canvas3d.addEventListener('pointerup', () => { orbitPointer = null; });
-    canvas3d.addEventListener('pointercancel', () => { orbitPointer = null; });
+    canvas3d.addEventListener('pointerup', event => { handleAimPointerUp(event); orbitPointer = null; });
+    canvas3d.addEventListener('pointercancel', event => { handleAimPointerUp(event); orbitPointer = null; });
     canvas3d.addEventListener('wheel', event => {
       event.preventDefault();
       zoom = clamp(zoom * Math.exp(-event.deltaY * .001), .55, 2);
       draw3d();
     }, { passive: false });
     canvas.addEventListener('pointerdown', event => {
+      if (handleAimPointerDown(event)) return;
       if (event.button !== 0) return;
       const p = pointerPosition(event);
       if (tool==='draw') {
@@ -1182,7 +1263,7 @@
         lineStart=null; linePreview=null; selected=points.length-1; stop(); progress=0;
         setMessage(); updateViewHint(); rebuild(); return;
       }
-      if (placingRobot) { selectRobotPosition(toField(p.x, p.y)); return; }
+      if (placingRobot) { startPlacementAim(toField(p.x, p.y),event); return; }
       if (handleLoader(event)) return;
       if (editingLoader) { setMessage('Select one of the four corner loaders.'); return; }
       if (flipClickedToggle(event)) return;
@@ -1199,6 +1280,7 @@
       setMessage(); rebuild();
     });
     canvas.addEventListener('pointermove', event => {
+      if (handleAimPointerMove(event)) return;
       if (tool==='draw' && drawing) {
         const p=pointerPosition(event), point=toField(p.x,p.y), next={x:point.x/settings.size,y:point.y/settings.size};
         const last=drawing[drawing.length-1];
@@ -1211,9 +1293,15 @@
       points[selected] = {...points[selected], ...toField(p.x, p.y)}; rebuild();
     });
     function endDrag() { dragging = false; drawing=null; }
-    canvas.addEventListener('pointerup', endDrag);
-    canvas.addEventListener('pointercancel', endDrag);
+    canvas.addEventListener('pointerup', event => { handleAimPointerUp(event); endDrag(); });
+    canvas.addEventListener('pointercancel', event => { handleAimPointerUp(event); endDrag(); });
     document.addEventListener('keydown', event => {
+      if (aim) {
+        if (event.key==='Escape') {event.preventDefault(); cancelAim(); return;}
+        if (aim.mode==='place' && event.key==='Enter') {event.preventDefault(); confirmPlacement(); return;}
+        const turn={ArrowLeft:45,ArrowUp:45,ArrowRight:-45,ArrowDown:-45}[event.key];
+        if (aim.mode==='place' && turn) {event.preventDefault(); setAimHeading(((Math.round(aim.heading/45)*45+turn)%360+360)%360); return;}
+      }
       if (event.key === 'Escape' && !loaderMenu.hidden) { loaderMenu.hidden = true; return; }
       if (event.key === 'Escape' && lineStart) {lineStart=null; linePreview=null; updateViewHint(); draw(); return;}
       if ((event.key === 'Delete' || event.key === 'Backspace') && selected >= 0 && loaderMenu.hidden && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
@@ -1334,6 +1422,7 @@
     }
     function applySnapshot(snapshot) {
         const project=structuredClone(snapshot);
+        aim=null;
         settings=project.settings; robots=project.robots; activeRobotId=null;
         alliance=project.alliance; updateAlliance();
         loaderDefaults=project.loaderDefaults; matchLoads=project.matchLoads;
@@ -1495,7 +1584,7 @@
     }
     function switchScene(index) {
       if (!Number.isInteger(index)||index<0||index>=10||index===activeScene||sceneTransition) return;
-      stop(); syncRobot(); saveCurrentScene();
+      aim=null; stop(); syncRobot(); saveCurrentScene();
       const source=snapshotScene(), sourceItems=new Map();
       eachRawPositionedItem((item,p)=>sourceItems.set(item.id,{item,p}));
       const destination=scenes[index] || structuredClone(source);
