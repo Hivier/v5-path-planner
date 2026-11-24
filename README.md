@@ -2,8 +2,11 @@
 
 Interactive V5 robot path planner with a 3D field, four robots, and ten scenes.
 
-Run the app at https://hivier.github.io/v5-path-planner/ or open `index.html`
-locally. No installation or build is required.
+Open `index.html` locally. No installation or build is required.
+
+To publish the app, open **Settings > Pages**, choose **Deploy from a branch**,
+and select **main** and **/(root)**. After the deployment finishes, the app is
+available at https://hivier.github.io/v5-path-planner/.
 
 ## Controls
 
